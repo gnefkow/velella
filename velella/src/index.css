@@ -1,0 +1,36 @@
+@import "../../../counterfoil-kit/src/styles/semanticTokens.css";
+@import "./styles/base.css";
+
+:root {
+  --text-warning-orange: #e67e22;
+
+  /* Gap overrides: denser spacing for Stack/Inline (xs, sm, m, lg, xl) */
+  --gap-xs: 0.125rem;  /* 2px - was 4px */
+  --gap-sm: 0.25rem;  /* 4px - was 8px */
+  --gap-m: 0.5rem;    /* 8px - was 16px */
+  --gap-lg: 0.75rem;  /* 12px - was 24px */
+  --gap-xl: 1rem;     /* 16px - was 32px */
+}
+
+html,
+body {
+  height: 100%;
+  overflow: hidden;
+}
+
+#root {
+  min-height: 100vh;
+  height: 100%;
+}
+
+#root {
+  display: flex;
+  flex-direction: column;
+}
+
+body {
+  margin: 0;
+  background: var(--bg-primary, #0f0e06);
+  color: var(--text-primary, #f8fafc);
+  font-family: var(--font-ui, system-ui, sans-serif);
+}

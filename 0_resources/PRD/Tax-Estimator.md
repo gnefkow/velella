@@ -1,0 +1,1 @@
+estimateTax is a service that takes in YearFacts and outputs an estimate for the total tax expense for that year. 
