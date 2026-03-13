@@ -2,22 +2,73 @@ import { defineConfig, normalizePath } from "vite";
 import type { Plugin, ViteDevServer } from "vite";
 import react from "@vitejs/plugin-react-swc";
 import tailwindcss from "@tailwindcss/vite";
-import { readFileSync, writeFileSync } from "fs";
-import { join } from "path";
+import { readdirSync, readFileSync, writeFileSync } from "fs";
+import { extname, join } from "path";
 import yaml from "js-yaml";
 
 const DATA_DIR = join(__dirname, "data");
-const SCENARIO_FILE = join(DATA_DIR, "scenario001.yaml");
-const SCENARIO_FILE_PATH = normalizePath(SCENARIO_FILE);
+
+type ScenarioEntry = {
+  id: string;
+  file: string;
+};
+
+type ScenarioManifestItem = {
+  id: string;
+  label: string;
+};
+
+function discoverScenarioFiles(): ScenarioEntry[] {
+  const entries: ScenarioEntry[] = [];
+  const files = readdirSync(DATA_DIR, { withFileTypes: true });
+  for (const file of files) {
+    if (!file.isFile()) continue;
+    if (!file.name.startsWith("scenario")) continue;
+    const ext = extname(file.name);
+    if (ext !== ".yaml" && ext !== ".yml") continue;
+
+    const id = file.name.replace(ext, "");
+    entries.push({
+      id,
+      file: join(DATA_DIR, file.name),
+    });
+  }
+  return entries;
+}
+
+const SCENARIO_ENTRIES: ScenarioEntry[] = discoverScenarioFiles();
+const SCENARIOS: Record<string, string> = SCENARIO_ENTRIES.reduce(
+  (acc, entry) => {
+    acc[entry.id] = entry.file;
+    return acc;
+  },
+  {} as Record<string, string>
+);
+
+const DEFAULT_SCENARIO_ID =
+  SCENARIO_ENTRIES[0]?.id ??
+  Object.keys(SCENARIOS)[0] ??
+  "scenario001";
+
+const SCENARIO_FILE_PATHS = SCENARIO_ENTRIES.map((entry) =>
+  normalizePath(entry.file)
+);
 
 function scenarioApiPlugin(): Plugin {
   return {
     name: "scenario-api",
     configureServer(server: ViteDevServer) {
       server.middlewares.use("/api/scenario", (req, res, next) => {
+        const url = new URL(req.url ?? "", "http://localhost");
+        const requestedId = url.searchParams.get("scenarioId") || undefined;
+        const scenarioId = requestedId && SCENARIOS[requestedId]
+          ? requestedId
+          : DEFAULT_SCENARIO_ID;
+        const scenarioFile = SCENARIOS[scenarioId];
+
         if (req.method === "GET") {
           try {
-            const raw = readFileSync(SCENARIO_FILE, "utf-8");
+            const raw = readFileSync(scenarioFile, "utf-8");
             const data = yaml.load(raw) as object;
             res.setHeader("Content-Type", "application/json");
             res.end(JSON.stringify(data));
@@ -27,6 +78,7 @@ function scenarioApiPlugin(): Plugin {
           }
           return;
         }
+
         if (req.method === "PUT") {
           let body = "";
           req.on("data", (chunk: Buffer) => {
@@ -36,7 +88,7 @@ function scenarioApiPlugin(): Plugin {
             try {
               const data = JSON.parse(body) as object;
               const yamlStr = yaml.dump(data, { lineWidth: -1 });
-              writeFileSync(SCENARIO_FILE, yamlStr, "utf-8");
+              writeFileSync(scenarioFile, yamlStr, "utf-8");
               res.setHeader("Content-Type", "application/json");
               res.end(JSON.stringify({ ok: true }));
             } catch (err) {
@@ -46,11 +98,38 @@ function scenarioApiPlugin(): Plugin {
           });
           return;
         }
+
         next();
+      });
+
+      server.middlewares.use("/api/scenarios", (_req, res) => {
+        try {
+          const manifest: ScenarioManifestItem[] = SCENARIO_ENTRIES.map(
+            ({ id, file }) => {
+              const raw = readFileSync(file, "utf-8");
+              const data = yaml.load(raw) as
+                | {
+                    "scenario-info"?: {
+                      "scenario-title"?: string;
+                    };
+                  }
+                | undefined;
+              const title =
+                data?.["scenario-info"]?.["scenario-title"] ?? id;
+              return { id, label: title };
+            }
+          );
+          res.setHeader("Content-Type", "application/json");
+          res.end(JSON.stringify(manifest));
+        } catch (err) {
+          res.statusCode = 500;
+          res.end(JSON.stringify({ error: String(err) }));
+        }
       });
     },
     handleHotUpdate(ctx: { file: string }) {
-      if (normalizePath(ctx.file) === SCENARIO_FILE_PATH) {
+      const normalized = normalizePath(ctx.file);
+      if (SCENARIO_FILE_PATHS.includes(normalized)) {
         return [];
       }
     },
@@ -64,7 +143,7 @@ export default defineConfig({
       allow: ["..", "../../counterfoil-kit"],
     },
     watch: {
-      ignored: [SCENARIO_FILE_PATH],
+      ignored: SCENARIO_FILE_PATHS,
     },
   },
 });

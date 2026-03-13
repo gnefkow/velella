@@ -4,10 +4,16 @@ import type {
   HouseholdMember,
   YearInput,
 } from "../types/scenario";
+import type { Era } from "../types/era";
 import { generateMemberId } from "../lib/id";
 import { buildDefaultYearInput } from "../lib/yearFacts";
 
 const API_BASE = "/api";
+
+export interface ScenarioSummary {
+  id: string;
+  label: string;
+}
 
 function buildDenseYears(
   yearStart: number,
@@ -45,6 +51,7 @@ function yamlToScenario(raw: ScenarioYaml): Scenario {
   const existingByYear = new Map<number, YearInput>();
   for (const yr of rawYears) {
     const y = yr.year ?? yearStart;
+    const eraMeta = yr["era-metadata"];
     existingByYear.set(y, {
       year: y,
       wageIncome: { ...(yr["wage-income"] ?? {}) },
@@ -61,6 +68,12 @@ function yamlToScenario(raw: ScenarioYaml): Scenario {
         taxes: yr.expenses?.taxes ?? 0,
         otherExpenses: yr.expenses?.["other-expenses"] ?? 0,
       },
+      eraMetadata: eraMeta
+        ? {
+            eraId: eraMeta["era-id"] ?? "",
+            overriddenFields: eraMeta["overridden-fields"] ?? [],
+          }
+        : undefined,
     });
   }
 
@@ -70,6 +83,32 @@ function yamlToScenario(raw: ScenarioYaml): Scenario {
     incomeEarnerIds,
     existingByYear
   );
+
+  const rawEras = raw.eras ?? [];
+  const eras: Era[] = rawEras.map((er) => {
+    const ef = er["era-facts"];
+    return {
+      id: er.id ?? "",
+      nickname: er.nickname ?? "",
+      description: er.description ?? "",
+      startYear: er["start-year"] ?? yearStart,
+      endYear: er["end-year"] ?? yearEnd,
+      eraFacts: {
+        wageIncome: ef?.["wage-income"] ?? {},
+        otherIncome: {
+          dividendIncome: ef?.["other-income"]?.["dividend-income"] ?? 0,
+          interestIncome: ef?.["other-income"]?.["interest-income"] ?? 0,
+          longTermCapitalGains: ef?.["other-income"]?.["long-term-capital-gains"] ?? 0,
+          shortTermCapitalGains: ef?.["other-income"]?.["short-term-capital-gains"] ?? 0,
+        },
+        expenses: {
+          householdExpenses: ef?.expenses?.["household-expenses"] ?? 0,
+          taxes: ef?.expenses?.taxes ?? 0,
+          otherExpenses: ef?.expenses?.["other-expenses"] ?? 0,
+        },
+      },
+    };
+  });
 
   return {
     scenarioInfo: {
@@ -86,6 +125,7 @@ function yamlToScenario(raw: ScenarioYaml): Scenario {
     },
     householdMembers,
     years,
+    eras,
   };
 }
 
@@ -99,7 +139,7 @@ function scenarioToYaml(s: Scenario): ScenarioYaml {
     for (const id of incomeEarnerIds) {
       wageIncome[id] = yr.wageIncome[id] ?? 0;
     }
-    return {
+    const base = {
       year: yr.year,
       "wage-income": wageIncome,
       "other-income": {
@@ -114,7 +154,39 @@ function scenarioToYaml(s: Scenario): ScenarioYaml {
         "other-expenses": yr.expenses.otherExpenses,
       },
     };
+    if (yr.eraMetadata) {
+      return {
+        ...base,
+        "era-metadata": {
+          "era-id": yr.eraMetadata.eraId,
+          "overridden-fields": yr.eraMetadata.overriddenFields,
+        },
+      };
+    }
+    return base;
   });
+
+  const eras = (s.eras ?? []).map((e) => ({
+    id: e.id,
+    nickname: e.nickname,
+    description: e.description,
+    "start-year": e.startYear,
+    "end-year": e.endYear,
+    "era-facts": {
+      "wage-income": e.eraFacts.wageIncome,
+      "other-income": {
+        "dividend-income": e.eraFacts.otherIncome.dividendIncome,
+        "interest-income": e.eraFacts.otherIncome.interestIncome,
+        "long-term-capital-gains": e.eraFacts.otherIncome.longTermCapitalGains,
+        "short-term-capital-gains": e.eraFacts.otherIncome.shortTermCapitalGains,
+      },
+      expenses: {
+        "household-expenses": e.eraFacts.expenses.householdExpenses,
+        taxes: e.eraFacts.expenses.taxes,
+        "other-expenses": e.eraFacts.expenses.otherExpenses,
+      },
+    },
+  }));
 
   return {
     "scenario-info": {
@@ -135,12 +207,19 @@ function scenarioToYaml(s: Scenario): ScenarioYaml {
       birthday: m.birthday,
       "income-earner": m.incomeEarner,
     })),
+    eras,
     years,
   };
 }
 
-export async function loadScenario(): Promise<Scenario> {
-  const res = await fetch(`${API_BASE}/scenario`);
+function buildScenarioUrl(path: string, scenarioId?: string): string {
+  if (!scenarioId) return `${API_BASE}${path}`;
+  const params = new URLSearchParams({ scenarioId });
+  return `${API_BASE}${path}?${params.toString()}`;
+}
+
+export async function loadScenario(scenarioId?: string): Promise<Scenario> {
+  const res = await fetch(buildScenarioUrl("/scenario", scenarioId));
   if (!res.ok) throw new Error(`Failed to load scenario: ${res.status}`);
   const raw = (await res.json()) as ScenarioYaml;
   return yamlToScenario(raw);
@@ -169,12 +248,21 @@ export function rebuildYearsForRange(
   );
 }
 
-export async function saveScenario(scenario: Scenario): Promise<void> {
+export async function saveScenario(
+  scenario: Scenario,
+  scenarioId?: string
+): Promise<void> {
   const body = scenarioToYaml(scenario);
-  const res = await fetch(`${API_BASE}/scenario`, {
+  const res = await fetch(buildScenarioUrl("/scenario", scenarioId), {
     method: "PUT",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
   });
   if (!res.ok) throw new Error(`Failed to save scenario: ${res.status}`);
+}
+
+export async function loadScenarioManifest(): Promise<ScenarioSummary[]> {
+  const res = await fetch(`${API_BASE}/scenarios`);
+  if (!res.ok) throw new Error(`Failed to load scenarios: ${res.status}`);
+  return (await res.json()) as ScenarioSummary[];
 }

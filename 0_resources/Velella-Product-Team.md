@@ -18,6 +18,10 @@ Whenever you're writing a ticket, include bullet points about what is:
 - (1) Consistent with the [design philosophy](/0_resources/design_philosophy.md) and...
 - (2) Inconsistent with the [design philosophy](/0_resources/design_philosophy.md) and... 
 
+### **Our SImple yaml "database"**
+Since we are in the early stages of design, we're not concerned about building a database. We keep everything in our yaml files in the `data` directory. 
+*IMPORTANT NOTE: Whenever working on a ticket that updates the data model, make sure to update all of the test "scenario" yaml files in the `data` folder.* 
+
 ### **We know the Counterfoil team**
 We're implementing this project using the Counterfoil Toolkit. The kit is evolving along side our app with another team. 
 - Counterfoil's Goal is outlined in their philosophy. 

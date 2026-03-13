@@ -1,6 +1,6 @@
 import { useRef, useState } from "react";
 import { Button, Stack, Text } from "../../../../../counterfoil-kit/src/index.ts";
-import { HelpCircle } from "lucide-react";
+import { HelpCircle, Unlink, RotateCcw } from "lucide-react";
 import InfoBubble from "../General/InfoBubble";
 import EditableAmountCell, { type FocusAndEditHandle } from "./EditableAmountCell";
 
@@ -13,6 +13,12 @@ interface YearFactsFieldProps {
   cellKey?: string;
   registerCell?: (key: string, handle: FocusAndEditHandle | null) => void;
   onFocusNext?: (direction: "down" | "right") => boolean | void;
+  /** When true, field is disabled and shows override button. */
+  eraLocked?: boolean;
+  /** When true, field is editable and shows re-link button. */
+  eraOverride?: boolean;
+  onOverride?: () => void;
+  onRelink?: () => void;
 }
 
 function formatCurrency(value: number): string {
@@ -32,9 +38,17 @@ export default function YearFactsField({
   cellKey,
   registerCell,
   onFocusNext,
+  eraLocked,
+  eraOverride,
+  onOverride,
+  onRelink,
 }: YearFactsFieldProps) {
   const [isDescriptionOpen, setIsDescriptionOpen] = useState(false);
   const triggerRef = useRef<HTMLSpanElement | null>(null);
+
+  const isEditable = Boolean(onCommit) && !eraLocked;
+  const showOverrideButton = eraLocked && onOverride;
+  const showRelinkButton = eraOverride && onRelink;
 
   return (
     <div className="min-w-0 rounded border border-border-secondary bg-bg-primary px-4 py-4">
@@ -48,15 +62,35 @@ export default function YearFactsField({
             {title}
           </Text>
 
-          <span ref={triggerRef}>
-            <Button
-              variant="tertiary"
-              size="sm"
-              icon={<HelpCircle size={16} />}
-              aria-label={`Show description for ${title}`}
-              onClick={() => setIsDescriptionOpen((open) => !open)}
-            />
-          </span>
+          <div className="flex items-center gap-1 shrink-0">
+            {showOverrideButton && (
+              <Button
+                variant="tertiary"
+                size="md"
+                icon={<Unlink size={16} />}
+                aria-label={`Override ${title} from era`}
+                onClick={onOverride}
+              />
+            )}
+            {showRelinkButton && (
+              <Button
+                variant="tertiary"
+                size="md"
+                icon={<RotateCcw size={16} />}
+                aria-label={`Re-link ${title} to era`}
+                onClick={onRelink}
+              />
+            )}
+            <span ref={triggerRef}>
+              <Button
+                variant="tertiary"
+                size="sm"
+                icon={<HelpCircle size={16} />}
+                aria-label={`Show description for ${title}`}
+                onClick={() => setIsDescriptionOpen((open) => !open)}
+              />
+            </span>
+          </div>
 
           <InfoBubble
             isOpen={isDescriptionOpen}
@@ -69,10 +103,10 @@ export default function YearFactsField({
           </InfoBubble>
         </div>
 
-        {onCommit ? (
+        {isEditable ? (
           <EditableAmountCell
             value={value}
-            onCommit={onCommit}
+            onCommit={onCommit!}
             inputType={inputType}
             cellKey={cellKey}
             registerCell={registerCell}

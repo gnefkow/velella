@@ -39,13 +39,21 @@ export interface YearInput {
     taxes: number;
     otherExpenses: number;
   };
+  /** Era inheritance metadata (editing only; calculations read resolved values). */
+  eraMetadata?: {
+    eraId: string;
+    overriddenFields: string[];
+  };
 }
+
+import type { Era } from "./era";
 
 export interface Scenario {
   scenarioInfo: ScenarioInfo;
   assumptions: Assumptions;
   householdMembers: HouseholdMember[];
   years: YearInput[];
+  eras?: Era[];
 }
 
 /** Raw YAML shape (kebab-case keys) */
@@ -70,8 +78,33 @@ export interface ScenarioYaml {
     birthday?: string;
     "income-earner"?: boolean;
   }>;
+  eras?: Array<{
+    id?: string;
+    nickname?: string;
+    description?: string;
+    "start-year"?: number;
+    "end-year"?: number;
+    "era-facts"?: {
+      "wage-income"?: Record<string, number>;
+      "other-income"?: {
+        "dividend-income"?: number;
+        "interest-income"?: number;
+        "long-term-capital-gains"?: number;
+        "short-term-capital-gains"?: number;
+      };
+      expenses?: {
+        "household-expenses"?: number;
+        taxes?: number;
+        "other-expenses"?: number;
+      };
+    };
+  }>;
   years?: Array<{
     year?: number;
+    "era-metadata"?: {
+      "era-id"?: string;
+      "overridden-fields"?: string[];
+    };
     "wage-income"?: Record<string, number>;
     "other-income"?: {
       "dividend-income"?: number;

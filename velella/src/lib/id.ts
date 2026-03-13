@@ -5,3 +5,10 @@
 export function generateMemberId(): string {
   return crypto.randomUUID();
 }
+
+/**
+ * Generates a stable UUID-like string for eras.
+ */
+export function generateEraId(): string {
+  return crypto.randomUUID();
+}

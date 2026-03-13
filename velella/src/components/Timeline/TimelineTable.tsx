@@ -1,4 +1,4 @@
-import { useMemo, useRef, useCallback } from "react";
+import { useMemo, useRef, useCallback, Fragment } from "react";
 import {
   useReactTable,
   getCoreRowModel,
@@ -17,9 +17,11 @@ import type { Year } from "../../types/year";
 import type { Scenario, YearInput } from "../../types/scenario";
 import { ageInYear } from "../../lib/age";
 import { buildDefaultYearInput } from "../../lib/yearFacts";
+import { buildTimelineGroups, getGroupForYear } from "../../lib/timelineGroups";
 import EditableAmountCell, {
   type FocusAndEditHandle,
 } from "./EditableAmountCell";
+import TimelineGroupHeader from "./TimelineGroupHeader";
 
 export interface TimelineRow {
   year: number;
@@ -291,6 +293,29 @@ export default function TimelineTable({
   });
 
   const headerGroup = table.getHeaderGroups()[0];
+  const colCount = headerGroup.headers.length;
+
+  const timelineYears = useMemo(
+    () => years.map((y) => y.year),
+    [years]
+  );
+  const groups = useMemo(
+    () => buildTimelineGroups(timelineYears, scenario.eras ?? []),
+    [timelineYears, scenario.eras]
+  );
+  const rowByYear = useMemo(
+    () => new Map(rows.map((r) => [r.year, r])),
+    [rows]
+  );
+
+  function getRowBorderClass(year: number): string {
+    const group = getGroupForYear(groups, year);
+    if (!group) return "";
+    if (group.type === "era") {
+      return "border-l-[0.5em] border-l-accent-primary";
+    }
+    return "border-l-[0.5em] border-l-border-tertiary";
+  }
 
   return (
     <div className="overflow-x-auto overscroll-x-none p-[2em] [&_table]:!w-auto [&_table]:table-fixed">
@@ -312,20 +337,62 @@ export default function TimelineTable({
           ))}
         </TableHeader>
         <TableBody>
-          {table.getRowModel().rows.map((row) => (
-            <TableRow
-              key={row.id}
-              interactive
-              selected={row.original.year === selectedYear}
-              onClick={() => onSelectYear(row.original.year)}
-            >
-              {row.getVisibleCells().map((cell) => (
-                <TableCell key={cell.id} align="left">
-                  {flexRender(cell.column.columnDef.cell, cell.getContext())}
-                </TableCell>
-              ))}
-            </TableRow>
-          ))}
+          {groups.map((group, groupIndex) => {
+            const yearRows = group.years
+              .map((year) => rowByYear.get(year))
+              .filter((r): r is TimelineRow => r != null);
+            const tableRows = table.getRowModel().rows;
+            const rowIndices = yearRows.map(
+              (r) => tableRows.findIndex((tr) => tr.original.year === r.year)
+            );
+
+            return (
+              <Fragment key={groupIndex}>
+                <TimelineGroupHeader group={group} colSpan={colCount} />
+                {rowIndices.map((idx) => {
+                  if (idx < 0) return null;
+                  const row = tableRows[idx];
+                  const year = row.original.year;
+                  const borderClass = getRowBorderClass(year);
+                  const rowClass = [
+                    "h-10",
+                    "border-b border-border-secondary",
+                    "bg-bg-primary text-text-secondary",
+                    "group hover:bg-bg-primary-hover hover:text-text-primary",
+                    year === selectedYear ? "bg-bg-secondary" : null,
+                    "cursor-pointer",
+                    borderClass,
+                  ]
+                    .filter(Boolean)
+                    .join(" ");
+                  return (
+                    <tr
+                      key={row.id}
+                      onClick={() => onSelectYear(year)}
+                      className={rowClass}
+                    >
+                      {row.getVisibleCells().map((cell) => (
+                        <TableCell key={cell.id} align="left">
+                          {flexRender(
+                            cell.column.columnDef.cell,
+                            cell.getContext()
+                          )}
+                        </TableCell>
+                      ))}
+                    </tr>
+                  );
+                })}
+                {groupIndex < groups.length - 1 && (
+                  <tr>
+                    <td
+                      colSpan={colCount}
+                      className="h-[0.5em] p-0 bg-bg-primary"
+                    />
+                  </tr>
+                )}
+              </Fragment>
+            );
+          })}
         </TableBody>
       </Table>
     </div>

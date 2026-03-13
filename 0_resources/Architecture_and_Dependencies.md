@@ -27,8 +27,21 @@ Data Storage:
       - If yes, it is probably derived and can live only in memory.
       - If no, it is probably a user input and should be persisted.
 
+## **Data Assumptions**
+------------------------------------------------------------------------------------------
+Our app is built around `scenarios` which contain `years` and `eras`. Each `year` has `YearFacts` (such as income for household members, expenses, etc...). `Eras` group years and push `eraFacts` down to their included years; years can override individual fields. Each `year` has some calculations that are run based on the year, but they are light (computing the year-end portfolio, etc...). 
 
-## Dependencies
+We expect the data in this app to be quite small. For example:
+- We do not expect any more than two `scenarios` to be loaded at a time. 
+- We will never have more than 100 `years` in a single portfolio, our the average user will have 50 or less. 
+
+*What this means for development*
+It is ok for us to have less-optimized systems. We can lean toward flexibility and modularity rather than absolute efficiency. 
+
+
+
+## **Dependencies**
+------------------------------------------------------------------------------------------
 
 ### Application (runtime)
 

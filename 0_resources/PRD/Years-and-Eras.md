@@ -87,36 +87,44 @@ Hard to say. I would think about it in 5-3 year blocks. Some will be longer, lik
 
 ## Open Questions
 
-*Question:* What is the source of truth for inherited values?
-Should era facts live on the `era` and be resolved into each `year` dynamically, or should they be copied into each `year` whenever the era changes?
 
 
 *Question:* What is the granularity of overrides?
 When a user overrides inheritance on a `year`, are they overriding one field at a time, or detaching the whole year from the era?
+*ANSWER: One field at a time.*
 
 *Question:* What exactly does "revert" mean for an override?
 If a user reverts an overridden field on a `year`, should it snap back to the era's current value, or to the era value that existed at the moment the override was created?
+*Answer: it reverts to what is written in the Era.* 
 
 *Question:* What should happen when an `era` is deleted?
 Should deleting an era behave the same as removing all of its years from the era, meaning each year keeps whatever values it currently has until the user changes them?
+*Answer: yes. Those values are stores in the "year", so they basically just stay in the "year", just now there  is no more ability to "revert" any changes, and there is no `era` that would push changes onto it. The user can now edit this just like any other (non-era-bound) year.* 
 
 *Question:* What should happen if the assumptions year range changes?
 If the assumptions no longer include some years in an existing era, should the era be automatically truncated, invalidated, or require the user to resolve it?
+*Answer: Retuire the user to resolve it. This should be a task for us, to create that resolution flow*
+
 
 *Question:* How should users create eras in the UI?
 Should users create an era from the timeline, from a specific `year`, from a dedicated "add era" control, or through multiple entry points?
+*We'll get to that when we start designing the ticket(s)*
 
 *Question:* How visible should the narrative layer be?
 If narrative is the primary value of eras, where should the era name and description appear beyond the edit form?
+*Answer: the main place is on the NarrativePage, but we will also be able to see it on the TimelineTable.*
 
 *Question:* How should inheritance state be communicated in the UI?
 How will users tell the difference between a standalone `year`, a `year` inheriting from an `era`, a partially overridden `year`, and a `year` that used to belong to an era?
+*Answer: we'll get to that*
 
 *Question:* How much confirmation should be required for range edits?
 If a user changes an era's range and that action will immediately overwrite many years, should the UI confirm the action first or should it happen instantly?
+*Answer: we'll get to it*
 
 *Question:* Does any downstream logic need to know about inheritance?
 Do summaries, charts, tax estimation, and other engines only care about the resolved `year` facts, or do any of them need to know whether a value came directly from a `year` or from an `era`?
+*Answer: probably both. It depends on what they are. I wouldn't be surprised if we'll need to reference both Era and Year (and look at the crossover, like use "era" to define the year range) if we have these kinds of charts or summaries. Still, any of this will be derivative. The CORE interaction loop is people planning their eras, so any of these derivative necesities should not drive data modeling decisions.*
 
 
 ## Decision: `Era` Uses a Dumb-Push Model

@@ -1,6 +1,7 @@
 import { useMemo, useState, useEffect, useRef, useCallback } from "react";
 import { Text } from "../../../../../counterfoil-kit/src/index.ts";
 import { calculateTimeline } from "../../engine/calculateTimeline";
+import { createYearFieldOverride, relinkYearFieldToEra } from "../../services/eraService";
 import type { Scenario, YearInput } from "../../types/scenario";
 import TimelineTable from "./TimelineTable";
 import YearFactsPane from "./YearFactsPane";
@@ -77,6 +78,32 @@ export default function TimelinePage({
     [schedulePersist]
   );
 
+  const handleOverrideField = useCallback(
+    (year: number, fieldKey: string) => {
+      setLocalScenario((currentScenario) => {
+        if (!currentScenario) return currentScenario;
+        const updated = createYearFieldOverride(currentScenario, year, fieldKey);
+        latestScenarioRef.current = updated;
+        void onPersist(updated);
+        return updated;
+      });
+    },
+    [onPersist]
+  );
+
+  const handleRelinkField = useCallback(
+    (year: number, fieldKey: string) => {
+      setLocalScenario((currentScenario) => {
+        if (!currentScenario) return currentScenario;
+        const updated = relinkYearFieldToEra(currentScenario, year, fieldKey);
+        latestScenarioRef.current = updated;
+        void onPersist(updated);
+        return updated;
+      });
+    },
+    [onPersist]
+  );
+
   const years = useMemo(
     () => (localScenario ? calculateTimeline(localScenario) : []),
     [localScenario]
@@ -125,6 +152,8 @@ export default function TimelinePage({
           scenario={localScenario}
           selectedYearInput={selectedYearInput}
           onUpdateYearInput={handleYearInputUpdate}
+          onOverrideField={handleOverrideField}
+          onRelinkField={handleRelinkField}
         />
         <div className="min-h-0 min-w-0 flex-1 overflow-auto overscroll-x-none overscroll-contain bg-bg-primary">
           <TimelineTable

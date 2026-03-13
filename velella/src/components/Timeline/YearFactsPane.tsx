@@ -1,7 +1,9 @@
 import { useCallback, useMemo, useRef } from "react";
 import { Stack, Text } from "../../../../../counterfoil-kit/src/index.ts";
 import { calculateYearFacts } from "../../lib/yearFacts";
+import { isFieldOverridden } from "../../lib/eraHelpers";
 import type { Scenario, YearInput } from "../../types/scenario";
+import type { YearFactsFieldKey } from "../../types/era";
 import type { FocusAndEditHandle } from "./EditableAmountCell";
 import YearFactsField from "./YearFactsField";
 
@@ -12,18 +14,32 @@ interface YearFactsPaneProps {
     year: number,
     updater: (yearInput: YearInput) => YearInput
   ) => void;
+  onOverrideField?: (year: number, fieldKey: string) => void;
+  onRelinkField?: (year: number, fieldKey: string) => void;
 }
 
 export default function YearFactsPane({
   scenario,
   selectedYearInput,
   onUpdateYearInput,
+  onOverrideField,
+  onRelinkField,
 }: YearFactsPaneProps) {
   const cellRefs = useRef<Map<string, FocusAndEditHandle>>(new Map());
 
   const incomeEarners = useMemo(
     () => scenario.householdMembers.filter((member) => member.incomeEarner),
     [scenario.householdMembers]
+  );
+
+  const isYearInEra = Boolean(selectedYearInput?.eraMetadata?.eraId);
+  const getEraState = useCallback(
+    (fieldKey: YearFactsFieldKey) => {
+      if (!selectedYearInput || !isYearInEra) return { eraLocked: false, eraOverride: false };
+      const overridden = isFieldOverridden(selectedYearInput, fieldKey);
+      return { eraLocked: !overridden, eraOverride: overridden };
+    },
+    [selectedYearInput, isYearInEra]
   );
 
   const editableFieldKeys = useMemo(
@@ -107,7 +123,8 @@ export default function YearFactsPane({
 
           <Stack gap="sm">
             {incomeEarners.map((member) => {
-              const fieldKey = `wage-income-${member.id}`;
+              const fieldKey = `wage-income-${member.id}` as YearFactsFieldKey;
+              const { eraLocked, eraOverride } = getEraState(fieldKey);
 
               return (
                 <YearFactsField
@@ -127,6 +144,10 @@ export default function YearFactsPane({
                   cellKey={fieldKey}
                   registerCell={registerCell}
                   onFocusNext={() => focusNextField(fieldKey)}
+                  eraLocked={eraLocked}
+                  eraOverride={eraOverride}
+                  onOverride={() => onOverrideField?.(selectedYearInput.year, fieldKey)}
+                  onRelink={() => onRelinkField?.(selectedYearInput.year, fieldKey)}
                 />
               );
             })}
@@ -147,6 +168,10 @@ export default function YearFactsPane({
               cellKey="dividend-income"
               registerCell={registerCell}
               onFocusNext={() => focusNextField("dividend-income")}
+              eraLocked={getEraState("dividend-income").eraLocked}
+              eraOverride={getEraState("dividend-income").eraOverride}
+              onOverride={() => onOverrideField?.(selectedYearInput.year, "dividend-income")}
+              onRelink={() => onRelinkField?.(selectedYearInput.year, "dividend-income")}
             />
 
             <YearFactsField
@@ -165,6 +190,10 @@ export default function YearFactsPane({
               cellKey="interest-income"
               registerCell={registerCell}
               onFocusNext={() => focusNextField("interest-income")}
+              eraLocked={getEraState("interest-income").eraLocked}
+              eraOverride={getEraState("interest-income").eraOverride}
+              onOverride={() => onOverrideField?.(selectedYearInput.year, "interest-income")}
+              onRelink={() => onRelinkField?.(selectedYearInput.year, "interest-income")}
             />
 
             <YearFactsField
@@ -183,6 +212,10 @@ export default function YearFactsPane({
               cellKey="short-term-capital-gains"
               registerCell={registerCell}
               onFocusNext={() => focusNextField("short-term-capital-gains")}
+              eraLocked={getEraState("short-term-capital-gains").eraLocked}
+              eraOverride={getEraState("short-term-capital-gains").eraOverride}
+              onOverride={() => onOverrideField?.(selectedYearInput.year, "short-term-capital-gains")}
+              onRelink={() => onRelinkField?.(selectedYearInput.year, "short-term-capital-gains")}
             />
 
             <YearFactsField
@@ -207,6 +240,10 @@ export default function YearFactsPane({
               cellKey="long-term-capital-gains"
               registerCell={registerCell}
               onFocusNext={() => focusNextField("long-term-capital-gains")}
+              eraLocked={getEraState("long-term-capital-gains").eraLocked}
+              eraOverride={getEraState("long-term-capital-gains").eraOverride}
+              onOverride={() => onOverrideField?.(selectedYearInput.year, "long-term-capital-gains")}
+              onRelink={() => onRelinkField?.(selectedYearInput.year, "long-term-capital-gains")}
             />
 
             <YearFactsField
@@ -231,6 +268,10 @@ export default function YearFactsPane({
               cellKey="household-expenses"
               registerCell={registerCell}
               onFocusNext={() => focusNextField("household-expenses")}
+              eraLocked={getEraState("household-expenses").eraLocked}
+              eraOverride={getEraState("household-expenses").eraOverride}
+              onOverride={() => onOverrideField?.(selectedYearInput.year, "household-expenses")}
+              onRelink={() => onRelinkField?.(selectedYearInput.year, "household-expenses")}
             />
 
             <YearFactsField
@@ -249,6 +290,10 @@ export default function YearFactsPane({
               cellKey="taxes"
               registerCell={registerCell}
               onFocusNext={() => focusNextField("taxes")}
+              eraLocked={getEraState("taxes").eraLocked}
+              eraOverride={getEraState("taxes").eraOverride}
+              onOverride={() => onOverrideField?.(selectedYearInput.year, "taxes")}
+              onRelink={() => onRelinkField?.(selectedYearInput.year, "taxes")}
             />
 
             <YearFactsField
@@ -267,6 +312,10 @@ export default function YearFactsPane({
               cellKey="other-expenses"
               registerCell={registerCell}
               onFocusNext={() => focusNextField("other-expenses")}
+              eraLocked={getEraState("other-expenses").eraLocked}
+              eraOverride={getEraState("other-expenses").eraOverride}
+              onOverride={() => onOverrideField?.(selectedYearInput.year, "other-expenses")}
+              onRelink={() => onRelinkField?.(selectedYearInput.year, "other-expenses")}
             />
 
             <YearFactsField

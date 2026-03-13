@@ -17,7 +17,7 @@ export function buildDefaultYearInput(
     wageIncome[id] = existing?.wageIncome?.[id] ?? 0;
   }
 
-  return {
+  const result: YearInput = {
     year,
     wageIncome,
     otherIncome: {
@@ -32,6 +32,10 @@ export function buildDefaultYearInput(
       otherExpenses: existing?.expenses?.otherExpenses ?? 0,
     },
   };
+  if (existing?.eraMetadata) {
+    result.eraMetadata = existing.eraMetadata;
+  }
+  return result;
 }
 
 export function calculateYearFacts(yearInput?: YearInput): CalculatedYearFacts {
