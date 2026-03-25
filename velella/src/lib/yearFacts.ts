@@ -31,6 +31,14 @@ export function buildDefaultYearInput(
       taxes: existing?.expenses?.taxes ?? 0,
       otherExpenses: existing?.expenses?.otherExpenses ?? 0,
     },
+    modifyInvestmentDetails: existing?.modifyInvestmentDetails ?? false,
+    investmentBreakdown: {
+      traditionalRetirement:
+        existing?.investmentBreakdown?.traditionalRetirement ?? 0,
+      rothRetirement: existing?.investmentBreakdown?.rothRetirement ?? 0,
+      taxableInvestments:
+        existing?.investmentBreakdown?.taxableInvestments ?? 0,
+    },
   };
   if (existing?.eraMetadata) {
     result.eraMetadata = existing.eraMetadata;

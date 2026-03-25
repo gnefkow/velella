@@ -1,11 +1,16 @@
 import { useCallback, useMemo, useRef } from "react";
 import { Stack, Text } from "../../../../../counterfoil-kit/src/index.ts";
 import { calculateYearFacts } from "../../lib/yearFacts";
+import {
+  availableToInvestFromYearInput,
+  investmentDifferenceFromYearInput,
+} from "../../lib/invest";
 import { isFieldOverridden } from "../../lib/eraHelpers";
 import type { Scenario, YearInput } from "../../types/scenario";
 import type { YearFactsFieldKey } from "../../types/era";
 import type { FocusAndEditHandle } from "./EditableAmountCell";
 import YearFactsField from "./YearFactsField";
+import InvestFactsSection from "./InvestFactsSection";
 
 interface YearFactsPaneProps {
   scenario: Scenario;
@@ -16,6 +21,8 @@ interface YearFactsPaneProps {
   ) => void;
   onOverrideField?: (year: number, fieldKey: string) => void;
   onRelinkField?: (year: number, fieldKey: string) => void;
+  onOverrideInvestBlock?: (year: number) => void;
+  onRelinkInvestBlock?: (year: number) => void;
 }
 
 export default function YearFactsPane({
@@ -24,6 +31,8 @@ export default function YearFactsPane({
   onUpdateYearInput,
   onOverrideField,
   onRelinkField,
+  onOverrideInvestBlock,
+  onRelinkInvestBlock,
 }: YearFactsPaneProps) {
   const cellRefs = useRef<Map<string, FocusAndEditHandle>>(new Map());
 
@@ -33,6 +42,14 @@ export default function YearFactsPane({
   );
 
   const isYearInEra = Boolean(selectedYearInput?.eraMetadata?.eraId);
+  const investBlockOverridden = Boolean(
+    selectedYearInput &&
+      isYearInEra &&
+      (isFieldOverridden(selectedYearInput, "modify-investment-details") ||
+        isFieldOverridden(selectedYearInput, "traditional-retirement") ||
+        isFieldOverridden(selectedYearInput, "roth-retirement") ||
+        isFieldOverridden(selectedYearInput, "taxable-investments"))
+  );
   const getEraState = useCallback(
     (fieldKey: YearFactsFieldKey) => {
       if (!selectedYearInput || !isYearInEra) return { eraLocked: false, eraOverride: false };
@@ -93,9 +110,43 @@ export default function YearFactsPane({
     [onUpdateYearInput, selectedYearInput]
   );
 
+  const handleToggleModifyInvest = useCallback(
+    (next: boolean) => {
+      if (!selectedYearInput) return;
+      const y = selectedYearInput.year;
+      if (!next) {
+        if (isYearInEra) {
+          onRelinkInvestBlock?.(y);
+        } else {
+          updateYearInput((yi) => ({
+            ...yi,
+            modifyInvestmentDetails: false,
+            investmentBreakdown: {
+              traditionalRetirement: 0,
+              rothRetirement: 0,
+              taxableInvestments: 0,
+            },
+          }));
+        }
+        return;
+      }
+      updateYearInput((yi) => ({
+        ...yi,
+        modifyInvestmentDetails: true,
+        investmentBreakdown: yi.investmentBreakdown,
+      }));
+    },
+    [
+      isYearInEra,
+      onRelinkInvestBlock,
+      selectedYearInput,
+      updateYearInput,
+    ]
+  );
+
   if (!selectedYearInput) {
     return (
-      <aside className="flex h-full min-h-0 w-[18em] shrink-0 flex-col border-r border-border-secondary bg-bg-primary overflow-hidden">
+      <aside className="flex h-full min-h-0 w-[22em] shrink-0 flex-col border-l border-border-secondary bg-bg-primary overflow-hidden">
         <div className="overflow-y-auto overscroll-contain p-[1em]">
           <Text size="body1" hierarchy="secondary">
             Select a year to edit its facts.
@@ -108,8 +159,12 @@ export default function YearFactsPane({
   const { ordinaryIncome, totalIncome, totalExpenses } =
     calculateYearFacts(selectedYearInput);
 
+  const availableToInvest = availableToInvestFromYearInput(selectedYearInput);
+  const investmentDifference =
+    investmentDifferenceFromYearInput(selectedYearInput);
+
   return (
-    <aside className="flex h-full min-h-0 w-[18em] shrink-0 flex-col border-r border-border-secondary bg-bg-primary overflow-hidden">
+    <aside className="flex h-full min-h-0 w-[22em] shrink-0 flex-col border-l border-border-secondary bg-bg-primary overflow-hidden">
       <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-[1em]">
         <Stack gap="lg">
           <Stack gap="xs">
@@ -322,6 +377,38 @@ export default function YearFactsPane({
               title="Expenses"
               description="Household expenses, taxes, and other major expenses."
               value={totalExpenses}
+            />
+
+            <InvestFactsSection
+              availableToInvest={availableToInvest}
+              investmentDifference={investmentDifference}
+              modifyInvestmentDetails={
+                selectedYearInput.modifyInvestmentDetails
+              }
+              investmentBreakdown={selectedYearInput.investmentBreakdown}
+              onToggleModify={handleToggleModifyInvest}
+              onCommitBreakdown={(field, value) =>
+                updateYearInput((yi) => ({
+                  ...yi,
+                  investmentBreakdown: {
+                    ...yi.investmentBreakdown,
+                    [field]: value,
+                  },
+                }))
+              }
+              registerCell={registerCell}
+              isYearInEra={isYearInEra}
+              investBlockOverridden={investBlockOverridden}
+              onOverrideInvestBlock={
+                onOverrideInvestBlock
+                  ? () => onOverrideInvestBlock(selectedYearInput.year)
+                  : undefined
+              }
+              onRelinkInvestBlock={
+                onRelinkInvestBlock
+                  ? () => onRelinkInvestBlock(selectedYearInput.year)
+                  : undefined
+              }
             />
           </Stack>
         </Stack>

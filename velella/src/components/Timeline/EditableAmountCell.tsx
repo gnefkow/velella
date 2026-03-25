@@ -52,6 +52,7 @@ export default function EditableAmountCell({
   const [rawValue, setRawValue] = useState(
     inputType === "money" ? digitsFromNumber(value) : value.toString()
   );
+  const [isFocused, setIsFocused] = useState(false);
   const inputRef = useRef<HTMLInputElement | null>(null);
   const suppressBlurCommitRef = useRef(false);
 
@@ -80,10 +81,6 @@ export default function EditableAmountCell({
       return () => registerCell(cellKey, null);
     }
   }, [cellKey, registerCell]);
-
-  useEffect(() => {
-    setRawValue(inputType === "money" ? digitsFromNumber(value) : value.toString());
-  }, [inputType, value]);
 
   const commit = useCallback((direction?: "down" | "right") => {
     const n =
@@ -134,7 +131,13 @@ export default function EditableAmountCell({
     }
   };
 
-  const displayValue = inputType === "money" ? formatMoneyDisplay(rawValue) : rawValue;
+  const syncedRawValue =
+    inputType === "money" ? digitsFromNumber(value) : value.toString();
+  const displayValue = inputType === "money"
+    ? formatMoneyDisplay(isFocused ? rawValue : syncedRawValue)
+    : isFocused
+      ? rawValue
+      : syncedRawValue;
 
   return (
     <input
@@ -152,8 +155,15 @@ export default function EditableAmountCell({
 
         setRawValue(e.target.value);
       }}
-      onFocus={() => moveCaretToEnd()}
-      onBlur={handleBlur}
+      onFocus={() => {
+        setIsFocused(true);
+        setRawValue(syncedRawValue);
+        moveCaretToEnd();
+      }}
+      onBlur={() => {
+        setIsFocused(false);
+        handleBlur();
+      }}
       onKeyDown={handleKeyDown}
       className="w-full min-w-0 rounded border border-input-border bg-input-bg px-3 py-2 text-right text-body-1 text-text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-input focus-visible:ring-offset-2"
     />

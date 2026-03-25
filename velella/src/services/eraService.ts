@@ -1,9 +1,14 @@
 import type { Era } from "../types/era";
 import type { Scenario, YearInput } from "../types/scenario";
 import { generateEraId } from "../lib/id";
-import { buildDefaultEraFacts } from "../lib/eraFacts";
 import { yearsInRange, doesRangeOverlapOtherEra } from "../lib/eraHelpers";
 import { applyEraFactsToYearInput } from "../lib/eraFacts";
+
+function stripEraMetadata(yearInput: YearInput): YearInput {
+  const nextYearInput = { ...yearInput };
+  delete nextYearInput.eraMetadata;
+  return nextYearInput;
+}
 
 /** Creates a new era (does not persist; returns updated scenario). */
 export function createEra(
@@ -33,7 +38,6 @@ export function createEra(
   };
 
   const years = yearsInRange(draft.startYear, draft.endYear);
-  const yearsByYear = new Map(scenario.years.map((y) => [y.year, y]));
 
   const updatedYears = scenario.years.map((yearInput) => {
     if (!years.includes(yearInput.year)) return yearInput;
@@ -57,6 +61,8 @@ export function createEra(
         ),
         otherIncome: { ...era.eraFacts.otherIncome },
         expenses: { ...era.eraFacts.expenses },
+        modifyInvestmentDetails: era.eraFacts.modifyInvestmentDetails,
+        investmentBreakdown: { ...era.eraFacts.investmentBreakdown },
         eraMetadata: { eraId: era.id, overriddenFields: [] },
       };
       updatedYears.push(defaultInput);
@@ -110,15 +116,13 @@ export function updateEra(
   const updatedYears = scenario.years.map((yearInput) => {
     if (yearInput.eraMetadata?.eraId !== eraId) {
       if (removedYears.includes(yearInput.year)) {
-        const { eraMetadata, ...rest } = yearInput;
-        return rest;
+        return stripEraMetadata(yearInput);
       }
       return yearInput;
     }
 
     if (removedYears.includes(yearInput.year)) {
-      const { eraMetadata, ...rest } = yearInput;
-      return rest;
+      return stripEraMetadata(yearInput);
     }
 
     const overriddenFields = yearInput.eraMetadata?.overriddenFields ?? [];
@@ -142,6 +146,8 @@ export function updateEra(
         ),
         otherIncome: { ...draft.eraFacts.otherIncome },
         expenses: { ...draft.eraFacts.expenses },
+        modifyInvestmentDetails: draft.eraFacts.modifyInvestmentDetails,
+        investmentBreakdown: { ...draft.eraFacts.investmentBreakdown },
         eraMetadata: { eraId, overriddenFields: [] },
       };
       updatedYears.push(defaultInput);
@@ -163,8 +169,7 @@ export function updateEra(
 export function deleteEra(scenario: Scenario, eraId: string): Scenario {
   const updatedYears = scenario.years.map((yearInput) => {
     if (yearInput.eraMetadata?.eraId !== eraId) return yearInput;
-    const { eraMetadata, ...rest } = yearInput;
-    return rest;
+    return stripEraMetadata(yearInput);
   });
 
   return {
@@ -199,6 +204,73 @@ export function createYearFieldOverride(
 }
 
 /** Relinks a field to the era (removes override). */
+/** Adds multiple override keys for a year in one update (era years only). */
+export function addYearFieldOverrides(
+  scenario: Scenario,
+  year: number,
+  fieldKeys: string[]
+): Scenario {
+  const yearInput = scenario.years.find((y) => y.year === year);
+  if (!yearInput?.eraMetadata) return scenario;
+
+  const overriddenFields = [
+    ...new Set([...(yearInput.eraMetadata.overriddenFields ?? []), ...fieldKeys]),
+  ];
+
+  return {
+    ...scenario,
+    years: scenario.years.map((y) =>
+      y.year === year
+        ? {
+            ...y,
+            eraMetadata: { ...y.eraMetadata!, overriddenFields },
+          }
+        : y
+    ),
+  };
+}
+
+/** Removes override keys and reapplies era facts in one pass. */
+export function relinkYearFieldsToEra(
+  scenario: Scenario,
+  year: number,
+  fieldKeys: string[]
+): Scenario {
+  const yearInput = scenario.years.find((y) => y.year === year);
+  if (!yearInput?.eraMetadata) return scenario;
+
+  const era = (scenario.eras ?? []).find(
+    (e) => e.id === yearInput.eraMetadata!.eraId
+  );
+  if (!era) return scenario;
+
+  const keySet = new Set(fieldKeys);
+  const overriddenFields = (yearInput.eraMetadata.overriddenFields ?? []).filter(
+    (k) => !keySet.has(k)
+  );
+
+  const updatedYearInput = applyEraFactsToYearInput(
+    yearInput,
+    era.eraFacts,
+    overriddenFields
+  );
+
+  return {
+    ...scenario,
+    years: scenario.years.map((y) =>
+      y.year === year
+        ? {
+            ...updatedYearInput,
+            eraMetadata: {
+              eraId: yearInput.eraMetadata!.eraId,
+              overriddenFields,
+            },
+          }
+        : y
+    ),
+  };
+}
+
 export function relinkYearFieldToEra(
   scenario: Scenario,
   year: number,

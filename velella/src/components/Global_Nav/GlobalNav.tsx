@@ -1,4 +1,4 @@
-import { TabBar, Stack, Text } from "../../../../../counterfoil-kit/src/index.ts";
+import { TabBar, Text } from "../../../../../counterfoil-kit/src/index.ts";
 import type { ScenarioSummary } from "../../services/scenarioService";
 
 export type TabId = "narrative" | "timeline" | "assumptions";
@@ -35,7 +35,7 @@ export default function GlobalNav({
       className="shrink-0 w-full bg-bg-primary text-text-primary font-ui border-b border-border-primary flex items-center justify-between px-6 py-4"
       role="banner"
     >
-      <Stack direction="row" gap="md" align="center" className="min-w-0">
+      <div className="flex min-w-0 flex-row items-center gap-4">
         <div className="flex flex-col min-w-0">
           <Text
             size="body2"
@@ -73,7 +73,7 @@ export default function GlobalNav({
             </select>
           </label>
         )}
-      </Stack>
+      </div>
       <nav aria-label="Main">
         <TabBar
           tabs={TABS}

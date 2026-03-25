@@ -1,3 +1,5 @@
+import type { InvestmentBreakdown } from "./investment";
+
 /**
  * Era types (camelCase in code).
  * YAML uses kebab-case; conversion happens in scenarioService.
@@ -17,6 +19,10 @@ export interface EraFacts {
     taxes: number;
     otherExpenses: number;
   };
+  /** When false, invest amount follows income minus expenses for the era template. */
+  modifyInvestmentDetails: boolean;
+  /** Used for portfolio math only when `modifyInvestmentDetails` is true. */
+  investmentBreakdown: InvestmentBreakdown;
 }
 
 export interface Era {
@@ -37,7 +43,11 @@ export type YearFactsFieldKey =
   | "long-term-capital-gains"
   | "household-expenses"
   | "taxes"
-  | "other-expenses";
+  | "other-expenses"
+  | "modify-investment-details"
+  | "traditional-retirement"
+  | "roth-retirement"
+  | "taxable-investments";
 
 /** Metadata on a year for era inheritance (editing behavior only). */
 export interface YearEraMetadata {

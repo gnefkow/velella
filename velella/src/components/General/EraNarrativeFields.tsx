@@ -1,4 +1,4 @@
-import { InputField, Stack, Text } from "../../../../../counterfoil-kit/src/index.ts";
+import { InputField, Stack } from "../../../../../counterfoil-kit/src/index.ts";
 
 interface EraNarrativeFieldsProps {
   nickname: string;

@@ -8,7 +8,10 @@ export interface Year {
   portfolioBeg: number;
   totalIncome: number;
   totalExpenses: number;
-  cashChange: number;
+  /** Income minus expenses (cash available before a custom invest choice). */
+  availableToInvest: number;
+  /** Amount flowing into the portfolio this year (respects modify-invest toggle). */
+  invest: number;
   portfolioEnd: number;
   /** Cost Percent of Portfolio: expenses / portfolioEnd. Null when portfolioEnd <= 0. */
   cPop: number | null;

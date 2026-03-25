@@ -1,5 +1,8 @@
+import { useEffect } from "react";
 import { createPortal } from "react-dom";
 import { Button, Stack, Text } from "../../../../../counterfoil-kit/src/index.ts";
+import { showModalDebugToast } from "../../lib/modalDebugToast";
+import { MODAL_PORTAL_BACKDROP_STYLE } from "../../lib/modalPortalBackdropStyle";
 
 interface EraDeleteModalProps {
   isOpen: boolean;
@@ -14,11 +17,19 @@ export default function EraDeleteModal({
   onConfirm,
   onCancel,
 }: EraDeleteModalProps) {
+  useEffect(() => {
+    if (!isOpen) {
+      return;
+    }
+    showModalDebugToast("Modal fired");
+  }, [isOpen]);
+
   if (!isOpen) return null;
 
   return createPortal(
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
+      style={MODAL_PORTAL_BACKDROP_STYLE}
       role="dialog"
       aria-modal="true"
       aria-labelledby="delete-title"

@@ -1,6 +1,7 @@
 import type { Scenario } from "../types/scenario";
 import type { Year } from "../types/year";
-import { calculateYearFacts } from "../lib/yearFacts";
+import { buildDefaultYearInput, calculateYearFacts } from "../lib/yearFacts";
+import { effectiveInvestFromYearInput } from "../lib/invest";
 
 /**
  * Calculates the timeline of years with portfolio amounts.
@@ -8,8 +9,9 @@ import { calculateYearFacts } from "../lib/yearFacts";
  * real-return-factor = (1 + marketReturn) / (1 + inflationRate)
  *
  * For each year:
- *   cashChange = totalIncome - totalExpenses
- *   portfolioEnd = (portfolioBeg * realReturnFactor) + cashChange
+ *   availableToInvest = totalIncome - totalExpenses
+ *   invest = effective contribution (custom or available)
+ *   portfolioEnd = (portfolioBeg * realReturnFactor) + invest
  *   next year's portfolioBeg = this year's portfolioEnd
  */
 
@@ -17,6 +19,9 @@ export function calculateTimeline(scenario: Scenario): Year[] {
   const { yearStart, yearEnd } = scenario.scenarioInfo;
   const { initialPortfolio, inflationRate, marketReturn } = scenario.assumptions;
   const yearInputsByYear = new Map(scenario.years.map((yearInput) => [yearInput.year, yearInput]));
+  const incomeEarnerIds = scenario.householdMembers
+    .filter((m) => m.incomeEarner)
+    .map((m) => m.id);
 
   const realReturnFactor = (1 + marketReturn) / (1 + inflationRate);
 
@@ -27,11 +32,14 @@ export function calculateTimeline(scenario: Scenario): Year[] {
 
   for (let i = 0; i <= numYears; i++) {
     const year = yearStart + i;
-    const yearInput = yearInputsByYear.get(year);
+    const yearInput =
+      yearInputsByYear.get(year) ??
+      buildDefaultYearInput(year, incomeEarnerIds);
     const { totalIncome, totalExpenses } = calculateYearFacts(yearInput);
-    const cashChange = totalIncome - totalExpenses;
+    const availableToInvest = totalIncome - totalExpenses;
+    const invest = effectiveInvestFromYearInput(yearInput);
 
-    const portfolioEnd = portfolioBeg * realReturnFactor + cashChange;
+    const portfolioEnd = portfolioBeg * realReturnFactor + invest;
     const cPop =
       portfolioEnd > 0 ? totalExpenses / portfolioEnd : null;
 
@@ -41,7 +49,8 @@ export function calculateTimeline(scenario: Scenario): Year[] {
       portfolioBeg,
       totalIncome,
       totalExpenses,
-      cashChange,
+      availableToInvest,
+      invest,
       portfolioEnd,
       cPop,
     });

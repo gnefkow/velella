@@ -23,6 +23,14 @@ export function buildDefaultEraFacts(
       taxes: existing?.expenses?.taxes ?? 0,
       otherExpenses: existing?.expenses?.otherExpenses ?? 0,
     },
+    modifyInvestmentDetails: existing?.modifyInvestmentDetails ?? false,
+    investmentBreakdown: {
+      traditionalRetirement:
+        existing?.investmentBreakdown?.traditionalRetirement ?? 0,
+      rothRetirement: existing?.investmentBreakdown?.rothRetirement ?? 0,
+      taxableInvestments:
+        existing?.investmentBreakdown?.taxableInvestments ?? 0,
+    },
   };
 }
 
@@ -35,7 +43,7 @@ export function applyEraFactsToYearInput(
   const isOverridden = (key: string) => overriddenFields.includes(key);
 
   const wageIncome: Record<string, number> = {};
-  for (const [id, value] of Object.entries(yearInput.wageIncome)) {
+  for (const [id] of Object.entries(yearInput.wageIncome)) {
     const fieldKey = `wage-income-${id}`;
     wageIncome[id] = isOverridden(fieldKey)
       ? yearInput.wageIncome[id] ?? 0
@@ -76,6 +84,20 @@ export function applyEraFactsToYearInput(
       otherExpenses: isOverridden("other-expenses")
         ? yearInput.expenses.otherExpenses
         : eraFacts.expenses.otherExpenses,
+    },
+    modifyInvestmentDetails: isOverridden("modify-investment-details")
+      ? yearInput.modifyInvestmentDetails
+      : eraFacts.modifyInvestmentDetails,
+    investmentBreakdown: {
+      traditionalRetirement: isOverridden("traditional-retirement")
+        ? yearInput.investmentBreakdown.traditionalRetirement
+        : eraFacts.investmentBreakdown.traditionalRetirement,
+      rothRetirement: isOverridden("roth-retirement")
+        ? yearInput.investmentBreakdown.rothRetirement
+        : eraFacts.investmentBreakdown.rothRetirement,
+      taxableInvestments: isOverridden("taxable-investments")
+        ? yearInput.investmentBreakdown.taxableInvestments
+        : eraFacts.investmentBreakdown.taxableInvestments,
     },
   };
 }

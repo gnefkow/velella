@@ -1,0 +1,65 @@
+/*
+ * Global text field styling (ticket 025).
+ * Uses !important so these win over per-component Tailwind utilities.
+ * Default: white (--bg-primary), no visible border; hover/focus rings use box-shadow
+ * so UA borders and 1px "transparent" borders never show as gray lines.
+ * Opt out with .field-chrome-skip when an input must not use this chrome.
+ * Era pane nickname / description use .era-pane-narrative-field (see below).
+ */
+
+input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="file"]):not([type="hidden"]):not([type="button"]):not([type="submit"]):not([type="reset"]):not([type="image"]):not([type="color"]):not(.field-chrome-skip):not(.era-pane-narrative-field),
+textarea:not(.field-chrome-skip):not(.era-pane-narrative-field) {
+  padding: 0.25em !important;
+  border-radius: 0.25em !important;
+  background-color: var(--bg-primary) !important;
+  border: 1px solid var(--border-secondary) !important;
+  border-style: none !important;
+  border-image: none !important;
+  box-sizing: border-box !important;
+  box-shadow: none !important;
+  appearance: none !important;
+  -webkit-appearance: none !important;
+  outline: none !important;
+}
+
+input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="file"]):not([type="hidden"]):not([type="button"]):not([type="submit"]):not([type="reset"]):not([type="image"]):not([type="color"]):not(.field-chrome-skip):not(.era-pane-narrative-field):hover:not(:disabled):not(:focus),
+textarea:not(.field-chrome-skip):not(.era-pane-narrative-field):hover:not(:disabled):not(:focus) {
+  background-color: var(--bg-primary-hover) !important;
+  box-shadow: 0 0 0 1px var(--border-secondary) !important;
+}
+
+input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="file"]):not([type="hidden"]):not([type="button"]):not([type="submit"]):not([type="reset"]):not([type="image"]):not([type="color"]):not(.field-chrome-skip):not(.era-pane-narrative-field):focus,
+textarea:not(.field-chrome-skip):not(.era-pane-narrative-field):focus {
+  background-color: var(--bg-primary) !important;
+  box-shadow: 0 0 0 1px var(--fg-primary) !important;
+  outline: none !important;
+}
+
+/* EraDetailPane — nickname & description while editing (ticket 025) */
+input.era-pane-narrative-field,
+textarea.era-pane-narrative-field {
+  padding: 0.25em !important;
+  border-radius: 0.25em !important;
+  background-color: var(--bg-primary) !important;
+  border: 0 !important;
+  border-style: none !important;
+  border-image: none !important;
+  box-sizing: border-box !important;
+  box-shadow: none !important;
+  appearance: none !important;
+  -webkit-appearance: none !important;
+  outline: none !important;
+}
+
+input.era-pane-narrative-field:hover:not(:disabled):not(:focus),
+textarea.era-pane-narrative-field:hover:not(:disabled):not(:focus) {
+  background-color: var(--bg-primary-hover) !important;
+  box-shadow: 0 0 0 1px var(--border-secondary) !important;
+}
+
+input.era-pane-narrative-field:focus,
+textarea.era-pane-narrative-field:focus {
+  background-color: var(--bg-primary) !important;
+  box-shadow: 0 0 0 1px var(--fg-primary) !important;
+  outline: none !important;
+}

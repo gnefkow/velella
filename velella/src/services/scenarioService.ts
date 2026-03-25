@@ -7,6 +7,7 @@ import type {
 import type { Era } from "../types/era";
 import { generateMemberId } from "../lib/id";
 import { buildDefaultYearInput } from "../lib/yearFacts";
+import type { InvestmentBreakdown } from "../types/investment";
 
 const API_BASE = "/api";
 
@@ -27,6 +28,31 @@ function buildDenseYears(
     years.push(buildDefaultYearInput(y, incomeEarnerIds, existing));
   }
   return years;
+}
+
+function parseInvestmentBreakdown(
+  rawBreakdown:
+    | {
+        "traditional-retirement"?: number;
+        "roth-retirement"?: number;
+        "taxable-investments"?: number;
+      }
+    | undefined,
+  legacyInvest = 0
+): InvestmentBreakdown {
+  if (rawBreakdown) {
+    return {
+      traditionalRetirement: rawBreakdown["traditional-retirement"] ?? 0,
+      rothRetirement: rawBreakdown["roth-retirement"] ?? 0,
+      taxableInvestments: rawBreakdown["taxable-investments"] ?? 0,
+    };
+  }
+
+  return {
+    traditionalRetirement: 0,
+    rothRetirement: 0,
+    taxableInvestments: legacyInvest,
+  };
 }
 
 function yamlToScenario(raw: ScenarioYaml): Scenario {
@@ -52,6 +78,11 @@ function yamlToScenario(raw: ScenarioYaml): Scenario {
   for (const yr of rawYears) {
     const y = yr.year ?? yearStart;
     const eraMeta = yr["era-metadata"];
+    const modifyInvestmentDetails = yr["modify-investment-details"] ?? false;
+    const investmentBreakdown = parseInvestmentBreakdown(
+      yr["investment-breakdown"],
+      modifyInvestmentDetails ? (yr.invest ?? 0) : 0
+    );
     existingByYear.set(y, {
       year: y,
       wageIncome: { ...(yr["wage-income"] ?? {}) },
@@ -68,6 +99,8 @@ function yamlToScenario(raw: ScenarioYaml): Scenario {
         taxes: yr.expenses?.taxes ?? 0,
         otherExpenses: yr.expenses?.["other-expenses"] ?? 0,
       },
+      modifyInvestmentDetails,
+      investmentBreakdown,
       eraMetadata: eraMeta
         ? {
             eraId: eraMeta["era-id"] ?? "",
@@ -87,6 +120,11 @@ function yamlToScenario(raw: ScenarioYaml): Scenario {
   const rawEras = raw.eras ?? [];
   const eras: Era[] = rawEras.map((er) => {
     const ef = er["era-facts"];
+    const eraModify = ef?.["modify-investment-details"] ?? false;
+    const investmentBreakdown = parseInvestmentBreakdown(
+      ef?.["investment-breakdown"],
+      eraModify ? (ef?.invest ?? 0) : 0
+    );
     return {
       id: er.id ?? "",
       nickname: er.nickname ?? "",
@@ -106,6 +144,8 @@ function yamlToScenario(raw: ScenarioYaml): Scenario {
           taxes: ef?.expenses?.taxes ?? 0,
           otherExpenses: ef?.expenses?.["other-expenses"] ?? 0,
         },
+        modifyInvestmentDetails: eraModify,
+        investmentBreakdown,
       },
     };
   });
@@ -134,12 +174,14 @@ function scenarioToYaml(s: Scenario): ScenarioYaml {
     .filter((m) => m.incomeEarner)
     .map((m) => m.id);
 
-  const years = s.years.map((yr) => {
+  type YamlYear = NonNullable<ScenarioYaml["years"]>[number];
+
+  const years: YamlYear[] = s.years.map((yr) => {
     const wageIncome: Record<string, number> = {};
     for (const id of incomeEarnerIds) {
       wageIncome[id] = yr.wageIncome[id] ?? 0;
     }
-    const base = {
+    const row: YamlYear = {
       year: yr.year,
       "wage-income": wageIncome,
       "other-income": {
@@ -154,39 +196,58 @@ function scenarioToYaml(s: Scenario): ScenarioYaml {
         "other-expenses": yr.expenses.otherExpenses,
       },
     };
-    if (yr.eraMetadata) {
-      return {
-        ...base,
-        "era-metadata": {
-          "era-id": yr.eraMetadata.eraId,
-          "overridden-fields": yr.eraMetadata.overriddenFields,
-        },
+    if (yr.modifyInvestmentDetails) {
+      row["modify-investment-details"] = true;
+      row["investment-breakdown"] = {
+        "traditional-retirement":
+          yr.investmentBreakdown.traditionalRetirement,
+        "roth-retirement": yr.investmentBreakdown.rothRetirement,
+        "taxable-investments": yr.investmentBreakdown.taxableInvestments,
       };
     }
-    return base;
+    if (yr.eraMetadata) {
+      row["era-metadata"] = {
+        "era-id": yr.eraMetadata.eraId,
+        "overridden-fields": yr.eraMetadata.overriddenFields,
+      };
+    }
+    return row;
   });
 
-  const eras = (s.eras ?? []).map((e) => ({
-    id: e.id,
-    nickname: e.nickname,
-    description: e.description,
-    "start-year": e.startYear,
-    "end-year": e.endYear,
-    "era-facts": {
-      "wage-income": e.eraFacts.wageIncome,
+  const eras = (s.eras ?? []).map((e) => {
+    const facts = e.eraFacts;
+    const ef: Record<string, unknown> = {
+      "wage-income": facts.wageIncome,
       "other-income": {
-        "dividend-income": e.eraFacts.otherIncome.dividendIncome,
-        "interest-income": e.eraFacts.otherIncome.interestIncome,
-        "long-term-capital-gains": e.eraFacts.otherIncome.longTermCapitalGains,
-        "short-term-capital-gains": e.eraFacts.otherIncome.shortTermCapitalGains,
+        "dividend-income": facts.otherIncome.dividendIncome,
+        "interest-income": facts.otherIncome.interestIncome,
+        "long-term-capital-gains": facts.otherIncome.longTermCapitalGains,
+        "short-term-capital-gains": facts.otherIncome.shortTermCapitalGains,
       },
       expenses: {
-        "household-expenses": e.eraFacts.expenses.householdExpenses,
-        taxes: e.eraFacts.expenses.taxes,
-        "other-expenses": e.eraFacts.expenses.otherExpenses,
+        "household-expenses": facts.expenses.householdExpenses,
+        taxes: facts.expenses.taxes,
+        "other-expenses": facts.expenses.otherExpenses,
       },
-    },
-  }));
+    };
+    if (facts.modifyInvestmentDetails) {
+      ef["modify-investment-details"] = true;
+      ef["investment-breakdown"] = {
+        "traditional-retirement":
+          facts.investmentBreakdown.traditionalRetirement,
+        "roth-retirement": facts.investmentBreakdown.rothRetirement,
+        "taxable-investments": facts.investmentBreakdown.taxableInvestments,
+      };
+    }
+    return {
+      id: e.id,
+      nickname: e.nickname,
+      description: e.description,
+      "start-year": e.startYear,
+      "end-year": e.endYear,
+      "era-facts": ef,
+    };
+  });
 
   return {
     "scenario-info": {

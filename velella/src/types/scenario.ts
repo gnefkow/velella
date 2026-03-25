@@ -1,3 +1,5 @@
+import type { InvestmentBreakdown } from "./investment";
+
 /**
  * Scenario types (camelCase in code).
  * YAML uses kebab-case; conversion happens in scenarioService.
@@ -39,6 +41,10 @@ export interface YearInput {
     taxes: number;
     otherExpenses: number;
   };
+  /** When false, effective invest equals income minus expenses. */
+  modifyInvestmentDetails: boolean;
+  /** Persisted only when `modifyInvestmentDetails` is true; otherwise treated as zero. */
+  investmentBreakdown: InvestmentBreakdown;
   /** Era inheritance metadata (editing only; calculations read resolved values). */
   eraMetadata?: {
     eraId: string;
@@ -97,6 +103,14 @@ export interface ScenarioYaml {
         taxes?: number;
         "other-expenses"?: number;
       };
+      "modify-investment-details"?: boolean;
+      "investment-breakdown"?: {
+        "traditional-retirement"?: number;
+        "roth-retirement"?: number;
+        "taxable-investments"?: number;
+      };
+      /** @deprecated kept for backward compatibility with older scenario files. */
+      invest?: number;
     };
   }>;
   years?: Array<{
@@ -117,5 +131,13 @@ export interface ScenarioYaml {
       taxes?: number;
       "other-expenses"?: number;
     };
+    "modify-investment-details"?: boolean;
+    "investment-breakdown"?: {
+      "traditional-retirement"?: number;
+      "roth-retirement"?: number;
+      "taxable-investments"?: number;
+    };
+    /** @deprecated kept for backward compatibility with older scenario files. */
+    invest?: number;
   }>;
 }

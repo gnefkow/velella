@@ -1,9 +1,11 @@
 import { Text } from "../../../../../counterfoil-kit/src/index.ts";
 import type { TimelineGroup } from "../../lib/timelineGroups";
+import type { Era } from "../../types/era";
 
 interface TimelineGroupHeaderProps {
   group: TimelineGroup;
   colSpan: number;
+  onSelectEraHeader?: (era: Era, firstYear: number | null) => void;
 }
 
 /**
@@ -14,6 +16,7 @@ interface TimelineGroupHeaderProps {
 export default function TimelineGroupHeader({
   group,
   colSpan,
+  onSelectEraHeader,
 }: TimelineGroupHeaderProps) {
   if (group.type === "era") {
     const { era, years } = group;
@@ -25,7 +28,15 @@ export default function TimelineGroupHeader({
       <tr>
         <td
           colSpan={colSpan}
-          className="bg-accent-primary px-[1em] py-[0.25em] text-left"
+          className={[
+            "bg-accent-primary px-[1em] py-[0.25em] text-left",
+            onSelectEraHeader ? "cursor-pointer" : "",
+          ]
+            .filter(Boolean)
+            .join(" ")}
+          onClick={() =>
+            onSelectEraHeader?.(era, years.length > 0 ? years[0] : null)
+          }
         >
           <Text size="body2" hierarchy="primary">
             {rangeText} {era.nickname || "Unnamed Era"}

@@ -18,6 +18,7 @@ import type { Scenario, YearInput } from "../../types/scenario";
 import { ageInYear } from "../../lib/age";
 import { buildDefaultYearInput } from "../../lib/yearFacts";
 import { buildTimelineGroups, getGroupForYear } from "../../lib/timelineGroups";
+import type { Era } from "../../types/era";
 import EditableAmountCell, {
   type FocusAndEditHandle,
 } from "./EditableAmountCell";
@@ -29,7 +30,8 @@ export interface TimelineRow {
   portfolioBeg: number;
   totalIncome: number;
   totalExpenses: number;
-  cashChange: number;
+  availableToInvest: number;
+  invest: number;
   portfolioEnd: number;
   cPop: number | null;
   yearInput: YearInput;
@@ -39,7 +41,8 @@ interface TimelineTableProps {
   scenario: Scenario;
   years: Year[];
   selectedYear: number | null;
-  onSelectYear: (year: number) => void;
+  onSelectYear: (year: number, openYearFactsPane?: boolean) => void;
+  onSelectEra: (era: Era, focusYear: number | null) => void;
   onUpdateYearInput: (
     year: number,
     updater: (yearInput: YearInput) => YearInput
@@ -91,7 +94,8 @@ function buildRows(
       portfolioBeg: yr.portfolioBeg,
       totalIncome: yr.totalIncome,
       totalExpenses: yr.totalExpenses,
-      cashChange: yr.cashChange,
+      availableToInvest: yr.availableToInvest,
+      invest: yr.invest,
       portfolioEnd: yr.portfolioEnd,
       cPop: yr.cPop,
       yearInput,
@@ -111,6 +115,7 @@ export default function TimelineTable({
   years,
   selectedYear,
   onSelectYear,
+  onSelectEra,
   onUpdateYearInput,
 }: TimelineTableProps) {
   const rows = useMemo(() => buildRows(years, scenario), [years, scenario]);
@@ -249,9 +254,14 @@ export default function TimelineTable({
         header: "Expenses",
         cell: (info) => formatCurrency(info.getValue()),
       }),
-      columnHelper.accessor("cashChange", {
-        id: "change",
-        header: "Change",
+      columnHelper.accessor("availableToInvest", {
+        id: "available-to-invest",
+        header: "Avail. to invest",
+        cell: (info) => formatCurrency(info.getValue()),
+      }),
+      columnHelper.accessor("invest", {
+        id: "invest",
+        header: "Invest",
         cell: (info) => formatCurrency(info.getValue()),
       }),
       columnHelper.accessor("portfolioEnd", {
@@ -286,6 +296,7 @@ export default function TimelineTable({
     ]
   );
 
+  // eslint-disable-next-line react-hooks/incompatible-library
   const table = useReactTable({
     data: rows,
     columns,
@@ -348,7 +359,11 @@ export default function TimelineTable({
 
             return (
               <Fragment key={groupIndex}>
-                <TimelineGroupHeader group={group} colSpan={colCount} />
+                <TimelineGroupHeader
+                  group={group}
+                  colSpan={colCount}
+                  onSelectEraHeader={onSelectEra}
+                />
                 {rowIndices.map((idx) => {
                   if (idx < 0) return null;
                   const row = tableRows[idx];
@@ -368,7 +383,18 @@ export default function TimelineTable({
                   return (
                     <tr
                       key={row.id}
-                      onClick={() => onSelectYear(year)}
+                      onClick={() => {
+                        const inEraGroup = group.type === "era";
+                        const hasOverrides =
+                          (row.original.yearInput.eraMetadata?.overriddenFields?.length ?? 0) > 0;
+
+                        if (inEraGroup && !hasOverrides) {
+                          onSelectEra(group.era, year);
+                          return;
+                        }
+
+                        onSelectYear(year, true);
+                      }}
                       className={rowClass}
                     >
                       {row.getVisibleCells().map((cell) => (
