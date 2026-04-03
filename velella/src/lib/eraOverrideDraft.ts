@@ -1,6 +1,7 @@
 import type { YearFactsFieldKey } from "../types/era";
 import type { Scenario } from "../types/scenario";
 import type { EraOverrideFieldDescriptor } from "./eraOverrideFields";
+import { indexToFilingStatus, labelForFilingStatus } from "./filingStatus";
 
 export type EraOverrideDraft = Partial<
   Record<YearFactsFieldKey, Record<number, number>>
@@ -138,6 +139,7 @@ export function reconcileEraOverrideDraftForYears(
 }
 
 export function buildOverrideSummary(
+  fieldKey: YearFactsFieldKey,
   valuesByYear: Record<number, number> | undefined,
   eraYears: number[]
 ): string {
@@ -157,6 +159,14 @@ export function buildOverrideSummary(
 
   const min = Math.min(...orderedValues);
   const max = Math.max(...orderedValues);
+
+  if (fieldKey === "filing-status") {
+    if (min === max) {
+      return labelForFilingStatus(indexToFilingStatus(min));
+    }
+    return `${labelForFilingStatus(indexToFilingStatus(min))} - ${labelForFilingStatus(indexToFilingStatus(max))}`;
+  }
+
   if (min === max) {
     return formatWholeDollarCurrency(min);
   }

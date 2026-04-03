@@ -1,4 +1,6 @@
 import type { InvestmentBreakdown } from "./investment";
+import type { FilingStatus, YearMisc } from "./scenario";
+import type { FederalTaxSource } from "./tax";
 
 /**
  * Era types (camelCase in code).
@@ -7,15 +9,24 @@ import type { InvestmentBreakdown } from "./investment";
 
 /** Era facts have the same shape as year inputs (minus year number). */
 export interface EraFacts {
+  filingStatus: FilingStatus;
   wageIncome: Record<string, number>;
+  socialSecurityBenefits: Record<string, number>;
   otherIncome: {
-    dividendIncome: number;
+    preTaxDistributions: number;
+    rothDistributions: number;
+    qualifiedDividends: number;
+    ordinaryDividends: number;
     interestIncome: number;
     longTermCapitalGains: number;
     shortTermCapitalGains: number;
   };
+  misc: YearMisc;
   expenses: {
     householdExpenses: number;
+    selectedFederalTaxAmount: number;
+    federalTaxSource: FederalTaxSource;
+    stateLocalTaxLiability: number;
     taxes: number;
     otherExpenses: number;
   };
@@ -37,15 +48,24 @@ export interface Era {
 /** Field keys that can be overridden when a year is in an era. */
 export type YearFactsFieldKey =
   | `wage-income-${string}`
-  | "dividend-income"
+  | `social-security-benefits-${string}`
+  | "filing-status"
+  | "pre-tax-distributions"
+  | "roth-distributions"
+  | "roth-conversions"
+  | "qualified-dividends"
+  | "ordinary-dividends"
   | "interest-income"
   | "short-term-capital-gains"
   | "long-term-capital-gains"
   | "household-expenses"
-  | "taxes"
+  | "selected-federal-tax-amount"
+  | "state-local-tax-liability"
   | "other-expenses"
   | "modify-investment-details"
-  | "traditional-retirement"
+  | "pre-tax-401k-contribution"
+  | "pre-tax-ira-contribution"
+  | "hsa-contribution"
   | "roth-retirement"
   | "taxable-investments";
 

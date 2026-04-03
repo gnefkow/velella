@@ -4,6 +4,7 @@ import { buildEraOverrideFieldDescriptors } from "./eraOverrideFields";
 import {
   applyEraOverrideDraftToScenario,
   buildEraOverrideDraftFromScenario,
+  buildOverrideSummary,
   reconcileEraOverrideDraftForYears,
 } from "./eraOverrideDraft";
 
@@ -37,45 +38,67 @@ function buildScenario(): Scenario {
         startYear: 2030,
         endYear: 2032,
         eraFacts: {
+          filingStatus: "single",
           wageIncome: { jack: 100000 },
+          socialSecurityBenefits: { jack: 0 },
           otherIncome: {
-            dividendIncome: 0,
+            preTaxDistributions: 0,
+            rothDistributions: 0,
+            qualifiedDividends: 0,
+            ordinaryDividends: 0,
             interestIncome: 0,
             longTermCapitalGains: 0,
             shortTermCapitalGains: 0,
           },
           expenses: {
             householdExpenses: 0,
+            selectedFederalTaxAmount: 0,
+            federalTaxSource: "manual",
+            stateLocalTaxLiability: 0,
             taxes: 0,
             otherExpenses: 0,
           },
           modifyInvestmentDetails: false,
           investmentBreakdown: {
-            traditionalRetirement: 0,
+            preTax401kContribution: 0,
+            preTaxIraContribution: 0,
+            hsaContribution: 0,
             rothRetirement: 0,
             taxableInvestments: 0,
           },
+          misc: { rothConversions: 0 },
         },
       },
     ],
     years: [
       {
         year: 2030,
+        filingStatus: "single",
         wageIncome: { jack: 100000 },
+        socialSecurityBenefits: { jack: 0 },
         otherIncome: {
-          dividendIncome: 0,
+          preTaxDistributions: 0,
+          rothDistributions: 0,
+          qualifiedDividends: 0,
+          ordinaryDividends: 0,
           interestIncome: 0,
           longTermCapitalGains: 0,
           shortTermCapitalGains: 0,
         },
+        misc: { rothConversions: 0 },
         expenses: {
           householdExpenses: 0,
+          selectedFederalTaxAmount: 0,
+          federalTaxSource: "manual",
+          stateLocalTaxLiability: 0,
           taxes: 0,
           otherExpenses: 0,
         },
         modifyInvestmentDetails: false,
         investmentBreakdown: {
-          traditionalRetirement: 0,
+          preTax401kContribution: 0,
+          preTaxIraContribution: 0,
+          hsaContribution: 0,
           rothRetirement: 0,
           taxableInvestments: 0,
         },
@@ -86,21 +109,32 @@ function buildScenario(): Scenario {
       },
       {
         year: 2031,
+        filingStatus: "single",
         wageIncome: { jack: 125000 },
+        socialSecurityBenefits: { jack: 0 },
         otherIncome: {
-          dividendIncome: 0,
+          preTaxDistributions: 0,
+          rothDistributions: 0,
+          qualifiedDividends: 0,
+          ordinaryDividends: 0,
           interestIncome: 0,
           longTermCapitalGains: 0,
           shortTermCapitalGains: 0,
         },
+        misc: { rothConversions: 0 },
         expenses: {
           householdExpenses: 0,
+          selectedFederalTaxAmount: 0,
+          federalTaxSource: "manual",
+          stateLocalTaxLiability: 0,
           taxes: 0,
           otherExpenses: 0,
         },
         modifyInvestmentDetails: false,
         investmentBreakdown: {
-          traditionalRetirement: 0,
+          preTax401kContribution: 0,
+          preTaxIraContribution: 0,
+          hsaContribution: 0,
           rothRetirement: 0,
           taxableInvestments: 0,
         },
@@ -111,21 +145,32 @@ function buildScenario(): Scenario {
       },
       {
         year: 2032,
+        filingStatus: "single",
         wageIncome: { jack: 100000 },
+        socialSecurityBenefits: { jack: 0 },
         otherIncome: {
-          dividendIncome: 0,
+          preTaxDistributions: 0,
+          rothDistributions: 0,
+          qualifiedDividends: 0,
+          ordinaryDividends: 0,
           interestIncome: 0,
           longTermCapitalGains: 0,
           shortTermCapitalGains: 0,
         },
+        misc: { rothConversions: 0 },
         expenses: {
           householdExpenses: 0,
+          selectedFederalTaxAmount: 0,
+          federalTaxSource: "manual",
+          stateLocalTaxLiability: 0,
           taxes: 0,
           otherExpenses: 0,
         },
         modifyInvestmentDetails: false,
         investmentBreakdown: {
-          traditionalRetirement: 0,
+          preTax401kContribution: 0,
+          preTaxIraContribution: 0,
+          hsaContribution: 0,
           rothRetirement: 0,
           taxableInvestments: 0,
         },
@@ -137,6 +182,17 @@ function buildScenario(): Scenario {
     ],
   };
 }
+
+describe("buildOverrideSummary", () => {
+  it("formats filing-status indices as readable labels", () => {
+    expect(
+      buildOverrideSummary("filing-status", { 2030: 0, 2031: 2 }, [2030, 2031])
+    ).toBe("Single - Married filing separately");
+    expect(
+      buildOverrideSummary("filing-status", { 2030: 1 }, [2030, 2031])
+    ).toBe("Married filing jointly");
+  });
+});
 
 describe("era override draft helpers", () => {
   it("rehydrates existing year overrides from scenario years", () => {

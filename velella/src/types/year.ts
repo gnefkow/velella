@@ -12,6 +12,8 @@ export interface Year {
   availableToInvest: number;
   /** Amount flowing into the portfolio this year (respects modify-invest toggle). */
   invest: number;
+  /** Net cash in vs out of the portfolio this year: invest minus engine withdrawals (not Δ portfolio). */
+  investDivestNet: number;
   portfolioEnd: number;
   /** Cost Percent of Portfolio: expenses / portfolioEnd. Null when portfolioEnd <= 0. */
   cPop: number | null;

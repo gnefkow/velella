@@ -7,6 +7,7 @@ import { extname, join } from "path";
 import yaml from "js-yaml";
 
 const DATA_DIR = join(__dirname, "data");
+const TAX_REFERENCE_DATA_FILE = join(DATA_DIR, "tax-reference-data.yaml");
 
 type ScenarioEntry = {
   id: string;
@@ -121,6 +122,18 @@ function scenarioApiPlugin(): Plugin {
           );
           res.setHeader("Content-Type", "application/json");
           res.end(JSON.stringify(manifest));
+        } catch (err) {
+          res.statusCode = 500;
+          res.end(JSON.stringify({ error: String(err) }));
+        }
+      });
+
+      server.middlewares.use("/api/tax-reference-data", (_req, res) => {
+        try {
+          const raw = readFileSync(TAX_REFERENCE_DATA_FILE, "utf-8");
+          const data = yaml.load(raw) as object;
+          res.setHeader("Content-Type", "application/json");
+          res.end(JSON.stringify(data));
         } catch (err) {
           res.statusCode = 500;
           res.end(JSON.stringify({ error: String(err) }));

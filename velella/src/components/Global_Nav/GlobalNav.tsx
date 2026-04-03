@@ -1,4 +1,11 @@
-import { TabBar, Text } from "../../../../../counterfoil-kit/src/index.ts";
+import { useState } from "react";
+import {
+  Button,
+  TabBar,
+  Text,
+} from "../../../../../counterfoil-kit/src/index.ts";
+import TaxReferenceDataModal from "../General/TaxReferenceDataModal";
+import { useTaxReferenceData } from "../../hooks/useTaxReferenceData";
 import type { ScenarioSummary } from "../../services/scenarioService";
 
 export type TabId = "narrative" | "timeline" | "assumptions";
@@ -26,6 +33,12 @@ export default function GlobalNav({
   selectedScenarioId,
   onScenarioChange,
 }: GlobalNavProps) {
+  const [isTaxReferenceDataOpen, setIsTaxReferenceDataOpen] = useState(false);
+  const {
+    taxReferenceData,
+    loading: taxReferenceDataLoading,
+    error: taxReferenceDataError,
+  } = useTaxReferenceData();
   const hasScenarios = scenarios.length > 0;
   const currentScenarioLabel =
     scenarios.find((s) => s.id === selectedScenarioId)?.label ?? "Scenario";
@@ -74,14 +87,30 @@ export default function GlobalNav({
           </label>
         )}
       </div>
-      <nav aria-label="Main">
-        <TabBar
-          tabs={TABS}
-          selectedId={activeTab}
-          onSelect={(id) => onTabChange(id as TabId)}
+      <div className="flex items-center gap-3">
+        <Button
+          variant="tertiary"
           size="md"
-        />
-      </nav>
+          onClick={() => setIsTaxReferenceDataOpen(true)}
+        >
+          Tax Reference Data
+        </Button>
+        <nav aria-label="Main">
+          <TabBar
+            tabs={TABS}
+            selectedId={activeTab}
+            onSelect={(id) => onTabChange(id as TabId)}
+            size="md"
+          />
+        </nav>
+      </div>
+      <TaxReferenceDataModal
+        isOpen={isTaxReferenceDataOpen}
+        onClose={() => setIsTaxReferenceDataOpen(false)}
+        taxReferenceData={taxReferenceData}
+        loading={taxReferenceDataLoading}
+        error={taxReferenceDataError}
+      />
     </header>
   );
 }

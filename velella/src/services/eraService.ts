@@ -56,10 +56,18 @@ export function createEra(
     if (!existingYears.has(year)) {
       const defaultInput: YearInput = {
         year,
+        filingStatus: era.eraFacts.filingStatus,
         wageIncome: Object.fromEntries(
           incomeEarnerIds.map((id) => [id, era.eraFacts.wageIncome[id] ?? 0])
         ),
+        socialSecurityBenefits: Object.fromEntries(
+          incomeEarnerIds.map((id) => [
+            id,
+            era.eraFacts.socialSecurityBenefits[id] ?? 0,
+          ])
+        ),
         otherIncome: { ...era.eraFacts.otherIncome },
+        misc: { ...era.eraFacts.misc },
         expenses: { ...era.eraFacts.expenses },
         modifyInvestmentDetails: era.eraFacts.modifyInvestmentDetails,
         investmentBreakdown: { ...era.eraFacts.investmentBreakdown },
@@ -114,6 +122,13 @@ export function updateEra(
   const addedYears = newYears.filter((y) => !oldYears.includes(y));
 
   const updatedYears = scenario.years.map((yearInput) => {
+    if (addedYears.includes(yearInput.year)) {
+      return {
+        ...applyEraFactsToYearInput(yearInput, draft.eraFacts, []),
+        eraMetadata: { eraId, overriddenFields: [] },
+      };
+    }
+
     if (yearInput.eraMetadata?.eraId !== eraId) {
       if (removedYears.includes(yearInput.year)) {
         return stripEraMetadata(yearInput);
@@ -141,10 +156,18 @@ export function updateEra(
     if (!existingYears.has(year)) {
       const defaultInput: YearInput = {
         year,
+        filingStatus: draft.eraFacts.filingStatus,
         wageIncome: Object.fromEntries(
           incomeEarnerIds.map((id) => [id, draft.eraFacts.wageIncome[id] ?? 0])
         ),
+        socialSecurityBenefits: Object.fromEntries(
+          incomeEarnerIds.map((id) => [
+            id,
+            draft.eraFacts.socialSecurityBenefits[id] ?? 0,
+          ])
+        ),
         otherIncome: { ...draft.eraFacts.otherIncome },
+        misc: { ...draft.eraFacts.misc },
         expenses: { ...draft.eraFacts.expenses },
         modifyInvestmentDetails: draft.eraFacts.modifyInvestmentDetails,
         investmentBreakdown: { ...draft.eraFacts.investmentBreakdown },

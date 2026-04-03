@@ -9,8 +9,12 @@ import {
 } from "react";
 import { Button } from "../../../../../counterfoil-kit/src/index.ts";
 import type { Era, YearFactsFieldKey } from "../../types/era";
-import type { Scenario } from "../../types/scenario";
+import type { FilingStatus, Scenario } from "../../types/scenario";
 import { buildDefaultEraFacts } from "../../lib/eraFacts";
+import {
+  defaultFederalTaxSourceForYears,
+  expensesWithSyncedTaxTotal,
+} from "../../lib/yearFacts";
 import {
   getYearDropdownOptions,
   yearsInRange,
@@ -41,6 +45,7 @@ interface EraDetailPaneProps {
   era: Era | null;
   onClose: () => void;
   onSave: (scenario: Scenario) => void;
+  onBulkApplyFilingStatus?: (status: FilingStatus) => void;
 }
 
 export interface EraDetailPaneHandle {
@@ -96,7 +101,13 @@ function buildInitialOverrideDraft(
 }
 
 const EraDetailPane = forwardRef<EraDetailPaneHandle, EraDetailPaneProps>(function EraDetailPane(
-  { scenario, era, onClose, onSave }: EraDetailPaneProps,
+  {
+    scenario,
+    era,
+    onClose,
+    onSave,
+    onBulkApplyFilingStatus,
+  }: EraDetailPaneProps,
   ref
 ) {
   const [draft, setDraft] = useState<EraDraft>(() =>
@@ -105,6 +116,9 @@ const EraDetailPane = forwardRef<EraDetailPaneHandle, EraDetailPaneProps>(functi
   const [draftOverridesByField, setDraftOverridesByField] =
     useState<EraOverrideDraft>(() => buildInitialOverrideDraft(scenario, era));
   const [showDeleteModal, setShowDeleteModal] = useState(false);
+
+  /** After a successful save, parent state is async; skip unsaved prompt until props catch up. */
+  const savedForCloseRef = useRef(false);
 
   const incomeEarners = useMemo(
     () => scenario.householdMembers.filter((m) => m.incomeEarner),
@@ -218,13 +232,51 @@ const EraDetailPane = forwardRef<EraDetailPaneHandle, EraDetailPaneProps>(functi
     previousDraftEraYearsRef.current = draftEraYears;
   }, [draftEraYears]);
 
+  useEffect(() => {
+    if (era || draft.startYear === null || draft.endYear === null) {
+      return;
+    }
+
+    setDraft((currentDraft) => {
+      if (currentDraft.eraFacts.expenses.selectedFederalTaxAmount !== 0) {
+        return currentDraft;
+      }
+
+      const yearsInDraftRange = scenario.years.filter(
+        (yearInput) =>
+          yearInput.year >= currentDraft.startYear! &&
+          yearInput.year <= currentDraft.endYear!
+      );
+      const nextSource = defaultFederalTaxSourceForYears(yearsInDraftRange);
+
+      if (currentDraft.eraFacts.expenses.federalTaxSource === nextSource) {
+        return currentDraft;
+      }
+
+      return {
+        ...currentDraft,
+        eraFacts: {
+          ...currentDraft.eraFacts,
+          expenses: expensesWithSyncedTaxTotal({
+            ...currentDraft.eraFacts.expenses,
+            federalTaxSource: nextSource,
+          }),
+        },
+      };
+    });
+  }, [draft.endYear, draft.startYear, era, scenario.years]);
+
   const overrideSummariesByField = useMemo(
     () =>
       Object.fromEntries(
         Object.entries(draftOverridesByField)
           .map(([fieldKey, valuesByYear]) => [
             fieldKey,
-            buildOverrideSummary(valuesByYear, draftEraYears),
+            buildOverrideSummary(
+              fieldKey as YearFactsFieldKey,
+              valuesByYear,
+              draftEraYears
+            ),
           ])
           .filter(([, summary]) => summary !== "")
       ) as Partial<Record<YearFactsFieldKey, string>>,
@@ -254,6 +306,7 @@ const EraDetailPane = forwardRef<EraDetailPaneHandle, EraDetailPaneProps>(functi
 
   const saveDraft = useCallback((): boolean => {
     if (!canSave) return false;
+    savedForCloseRef.current = false;
 
     try {
       const updatedScenario =
@@ -288,6 +341,7 @@ const EraDetailPane = forwardRef<EraDetailPaneHandle, EraDetailPaneProps>(functi
           : updatedScenario;
 
       onSave(scenarioWithOverrides);
+      savedForCloseRef.current = true;
       return true;
     } catch (err) {
       console.error("Failed to save era:", err);
@@ -335,10 +389,15 @@ const EraDetailPane = forwardRef<EraDetailPaneHandle, EraDetailPaneProps>(functi
     hasChangesRef.current = hasChanges;
   }, [hasChanges]);
 
+  useEffect(() => {
+    savedForCloseRef.current = false;
+  }, [draft, draftOverridesByField]);
+
   useImperativeHandle(
     ref,
     () => ({
-      hasUnsavedChanges: () => hasChangesRef.current,
+      hasUnsavedChanges: () =>
+        !savedForCloseRef.current && hasChangesRef.current,
       saveDraft,
     }),
     [saveDraft]
@@ -386,6 +445,7 @@ const EraDetailPane = forwardRef<EraDetailPaneHandle, EraDetailPaneProps>(functi
             draftOverridesByField={draftOverridesByField}
             overrideSummariesByField={overrideSummariesByField}
             onSaveFieldOverrides={handleSaveFieldOverrides}
+            onBulkApplyFilingStatus={onBulkApplyFilingStatus}
             onUpdateEraFacts={(updater) =>
               setDraft((currentDraft) => ({
                 ...currentDraft,

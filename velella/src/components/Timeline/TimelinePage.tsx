@@ -8,7 +8,8 @@ import {
   relinkYearFieldsToEra,
 } from "../../services/eraService";
 import type { Era } from "../../types/era";
-import type { Scenario, YearInput } from "../../types/scenario";
+import { applyFilingStatusGlobally } from "../../lib/filingStatus";
+import type { FilingStatus, Scenario, YearInput } from "../../types/scenario";
 import EraDetailPane, { type EraDetailPaneHandle } from "../General/EraDetailPane";
 import EraUnsavedChangesModal from "../General/EraUnsavedChangesModal";
 import TimelineTable from "./TimelineTable";
@@ -133,7 +134,9 @@ export default function TimelinePage({
         if (!currentScenario) return currentScenario;
         let updated = addYearFieldOverrides(currentScenario, year, [
           "modify-investment-details",
-          "traditional-retirement",
+          "pre-tax-401k-contribution",
+          "pre-tax-ira-contribution",
+          "hsa-contribution",
           "roth-retirement",
           "taxable-investments",
         ]);
@@ -145,7 +148,9 @@ export default function TimelinePage({
                   ...y,
                   modifyInvestmentDetails: true,
                   investmentBreakdown: {
-                    traditionalRetirement: 0,
+                    preTax401kContribution: 0,
+                    preTaxIraContribution: 0,
+                    hsaContribution: 0,
                     rothRetirement: 0,
                     taxableInvestments: 0,
                   },
@@ -167,10 +172,25 @@ export default function TimelinePage({
         if (!currentScenario) return currentScenario;
         const updated = relinkYearFieldsToEra(currentScenario, year, [
           "modify-investment-details",
-          "traditional-retirement",
+          "pre-tax-401k-contribution",
+          "pre-tax-ira-contribution",
+          "hsa-contribution",
           "roth-retirement",
           "taxable-investments",
         ]);
+        latestScenarioRef.current = updated;
+        schedulePersist(updated);
+        return updated;
+      });
+    },
+    [schedulePersist]
+  );
+
+  const handleBulkApplyFilingStatus = useCallback(
+    (status: FilingStatus) => {
+      setLocalScenario((currentScenario) => {
+        if (!currentScenario) return currentScenario;
+        const updated = applyFilingStatusGlobally(currentScenario, status);
         latestScenarioRef.current = updated;
         schedulePersist(updated);
         return updated;
@@ -424,6 +444,7 @@ export default function TimelinePage({
             onRelinkField={handleRelinkField}
             onOverrideInvestBlock={handleOverrideInvestBlock}
             onRelinkInvestBlock={handleRelinkInvestBlock}
+            onBulkApplyFilingStatus={handleBulkApplyFilingStatus}
           />
         )}
         {paneState.type === "era" && selectedEra && (
@@ -434,6 +455,7 @@ export default function TimelinePage({
             era={selectedEra}
             onClose={handleEraPaneClose}
             onSave={handleSaveEra}
+            onBulkApplyFilingStatus={handleBulkApplyFilingStatus}
           />
         )}
       </div>

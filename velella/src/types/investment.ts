@@ -1,5 +1,7 @@
 export interface InvestmentBreakdown {
-  traditionalRetirement: number;
+  preTax401kContribution: number;
+  preTaxIraContribution: number;
+  hsaContribution: number;
   rothRetirement: number;
   taxableInvestments: number;
 }

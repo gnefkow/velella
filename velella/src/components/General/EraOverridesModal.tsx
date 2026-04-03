@@ -8,7 +8,12 @@ import {
 import { createPortal } from "react-dom";
 import { Button } from "../../../../../counterfoil-kit/src/index.ts";
 import { RotateCcw, X } from "lucide-react";
+import {
+  FILING_STATUS_INDEX_SELECT_OPTIONS,
+  TAX_FILING_STATUS_SELECT_CLASSNAME,
+} from "../../lib/filingStatus";
 import { MODAL_PORTAL_BACKDROP_STYLE } from "../../lib/modalPortalBackdropStyle";
+import TertiaryNativeSelect from "../ui/TertiaryNativeSelect";
 import EraOverrideLinkedInputRow from "./EraOverrideLinkedInputRow";
 import EraPaneAmountInput from "./EraPaneAmountInput";
 
@@ -27,6 +32,8 @@ interface EraOverridesModalProps {
   isInitiallyOverridden: boolean;
   initialYearValues: Record<number, number>;
   initialLinkedValue: number;
+  /** `filing-status` uses index values (0–2) and select controls instead of currency. */
+  valueKind?: "currency" | "filing-status";
   onSave: (result: EraOverridesModalSaveResult) => void;
   onCancel: () => void;
 }
@@ -100,6 +107,7 @@ export default function EraOverridesModal({
   isInitiallyOverridden,
   initialYearValues,
   initialLinkedValue,
+  valueKind = "currency",
   onSave,
   onCancel,
 }: EraOverridesModalProps) {
@@ -219,7 +227,9 @@ export default function EraOverridesModal({
               id={overrideToggleDescId}
               className="m-0 pt-[2px] text-body-2 text-text-tertiary"
             >
-              Enter specific {fieldLabel} values for years in this era.
+              {valueKind === "filing-status"
+                ? `Choose a different ${fieldLabel.toLowerCase()} for specific years in this era.`
+                : `Enter specific ${fieldLabel} values for years in this era.`}
             </p>
           </div>
           <EraOverrideToggle
@@ -240,18 +250,36 @@ export default function EraOverridesModal({
                 <p className="m-0 text-body-1 text-text-primary">
                   {yearRowLabel(year)}
                 </p>
-                <EraPaneAmountInput
-                  label={yearRowLabel(year)}
-                  value={
-                    draftValuesByYear[year] ?? initialLinkedValue
-                  }
-                  onCommit={(value) =>
-                    setDraftValuesByYear((current) => ({
-                      ...current,
-                      [year]: value,
-                    }))
-                  }
-                />
+                {valueKind === "filing-status" ? (
+                  <TertiaryNativeSelect
+                    ariaLabel={yearRowLabel(year)}
+                    value={String(
+                      draftValuesByYear[year] ?? initialLinkedValue
+                    )}
+                    placeholder="Status"
+                    options={FILING_STATUS_INDEX_SELECT_OPTIONS}
+                    className={TAX_FILING_STATUS_SELECT_CLASSNAME}
+                    onValueChange={(next) =>
+                      setDraftValuesByYear((current) => ({
+                        ...current,
+                        [year]: Number(next),
+                      }))
+                    }
+                  />
+                ) : (
+                  <EraPaneAmountInput
+                    label={yearRowLabel(year)}
+                    value={
+                      draftValuesByYear[year] ?? initialLinkedValue
+                    }
+                    onCommit={(value) =>
+                      setDraftValuesByYear((current) => ({
+                        ...current,
+                        [year]: value,
+                      }))
+                    }
+                  />
+                )}
               </div>
             ))}
           </div>
@@ -262,6 +290,9 @@ export default function EraOverridesModal({
             eraEndYear={eraEndYear}
             value={draftLinkedValue}
             onCommit={(value) => setDraftLinkedValue(value)}
+            variant={
+              valueKind === "filing-status" ? "filing-status" : "amount"
+            }
           />
         )}
 

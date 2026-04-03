@@ -1,11 +1,10 @@
-import {
-  ChevronDown,
-  ChevronsRight,
-  MoreHorizontal,
-} from "lucide-react";
+import { ChevronsRight, MoreHorizontal, Pencil } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { Button } from "../../../../../counterfoil-kit/src/index.ts";
 import type { YearDropdownOption } from "../../lib/eraHelpers";
+import TertiaryNativeSelect, {
+  type TertiaryNativeSelectOption,
+} from "../ui/TertiaryNativeSelect";
 
 interface EraPaneHeaderProps {
   nickname: string;
@@ -22,50 +21,15 @@ interface EraPaneHeaderProps {
   onDelete?: () => void;
 }
 
-interface EraPaneYearSelectProps {
-  value: number | null;
-  options: YearDropdownOption[];
-  placeholder: string;
-  onChange: (year: number) => void;
-}
-
-function EraPaneYearSelect({
-  value,
-  options,
-  placeholder,
-  onChange,
-}: EraPaneYearSelectProps) {
-  return (
-    <div className="relative min-w-[4.25rem]">
-      <select
-        aria-label={placeholder}
-        value={value ?? ""}
-        onChange={(event) => {
-          const nextValue = event.target.value;
-          if (nextValue) {
-            onChange(Number(nextValue));
-          }
-        }}
-        className="w-full appearance-none rounded-full bg-bg-primary px-1 py-2 pr-6 text-center text-button-md text-text-secondary outline-none transition-colors hover:bg-bg-primary-hover focus-visible:ring-2 focus-visible:ring-input focus-visible:ring-offset-2"
-      >
-        <option value="">{placeholder}</option>
-        {options.map((option) => (
-          <option
-            key={option.year}
-            value={option.year}
-            disabled={option.disabled}
-            title={option.disabledReason}
-          >
-            {option.year}
-          </option>
-        ))}
-      </select>
-      <ChevronDown
-        size={18}
-        className="pointer-events-none absolute right-1.5 top-1/2 -translate-y-1/2 text-text-secondary"
-      />
-    </div>
-  );
+function mapYearOptionsToSelectOptions(
+  options: YearDropdownOption[]
+): TertiaryNativeSelectOption[] {
+  return options.map((option) => ({
+    value: String(option.year),
+    label: String(option.year),
+    disabled: option.disabled,
+    title: option.disabledReason,
+  }));
 }
 
 export default function EraPaneHeader({
@@ -146,18 +110,22 @@ export default function EraPaneHeader({
 
       <div className="flex items-start justify-between gap-4">
         <div className="flex items-center gap-0.5">
-          <EraPaneYearSelect
-            value={startYear}
-            options={startOptions}
+          <TertiaryNativeSelect
+            ariaLabel="Start year"
             placeholder="Start"
-            onChange={onStartChange}
+            value={startYear != null ? String(startYear) : null}
+            options={mapYearOptionsToSelectOptions(startOptions)}
+            onValueChange={(v) => onStartChange(Number(v))}
+            labelClassName="tabular-nums !pl-[2px]"
           />
           <div className="h-0 w-3.5 border-t border-border-secondary" />
-          <EraPaneYearSelect
-            value={endYear}
-            options={endOptions}
+          <TertiaryNativeSelect
+            ariaLabel="End year"
             placeholder="End"
-            onChange={onEndChange}
+            value={endYear != null ? String(endYear) : null}
+            options={mapYearOptionsToSelectOptions(endOptions)}
+            onValueChange={(v) => onEndChange(Number(v))}
+            labelClassName="tabular-nums"
           />
         </div>
 
@@ -206,15 +174,22 @@ export default function EraPaneHeader({
                 setIsEditingNickname(false);
               }
             }}
-            className="era-pane-narrative-field w-full min-w-0 text-[24px] font-bold leading-none text-text-primary"
+            className="era-pane-narrative-field era-pane-nickname-field w-full min-w-0 border-0 bg-bg-primary text-[24px] font-bold leading-none text-text-primary shadow-none outline-none ring-0 ring-offset-0 hover:bg-bg-primary-hover focus:outline-none focus-visible:outline-none focus-visible:ring-0 focus-visible:ring-offset-0"
           />
         ) : (
           <button
             type="button"
             onClick={() => setIsEditingNickname(true)}
-            className="w-fit rounded-md px-2 py-1 text-left text-[24px] font-bold leading-none text-text-primary transition-colors hover:bg-bg-primary-hover"
+            className="era-pane-nickname-field group relative w-fit rounded-md border-0 bg-bg-primary py-1 pl-2 pr-10 text-left text-[24px] font-bold leading-none text-text-primary shadow-none outline-none ring-0 ring-offset-0 transition-colors hover:bg-bg-primary-hover focus:outline-none focus-visible:outline-none focus-visible:ring-0 focus-visible:ring-offset-0 active:outline-none"
           >
-            {nickname.trim() || "Add nickname"}
+            <span className="min-w-0">
+              {nickname.trim() || "Add nickname"}
+            </span>
+            <Pencil
+              size={24}
+              aria-hidden="true"
+              className="pointer-events-none absolute right-2 top-1/2 shrink-0 -translate-y-1/2 text-text-tertiary opacity-0 transition-opacity group-hover:opacity-100"
+            />
           </button>
         )}
 

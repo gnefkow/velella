@@ -44,7 +44,8 @@ export default function EraInvestmentBreakdownModal({
               Remove investment breakdown?
             </h2>
             <Text size="body1" hierarchy="secondary">
-              This will delete the Traditional Retirement, Roth Retirement, and
+              This will delete the Pre-Tax 401(k) / 403(b), Traditional IRA,
+              Health Savings Account (HSA) Contributions, Roth Retirement, and
               Taxable Investments values and return Invest to the simple Income
               minus Expenses amount.
             </Text>

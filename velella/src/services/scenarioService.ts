@@ -6,7 +6,11 @@ import type {
 } from "../types/scenario";
 import type { Era } from "../types/era";
 import { generateMemberId } from "../lib/id";
-import { buildDefaultYearInput } from "../lib/yearFacts";
+import { normalizeFilingStatus } from "../lib/filingStatus";
+import {
+  buildDefaultYearInput,
+  expensesWithSyncedTaxTotal,
+} from "../lib/yearFacts";
 import type { InvestmentBreakdown } from "../types/investment";
 
 const API_BASE = "/api";
@@ -30,32 +34,61 @@ function buildDenseYears(
   return years;
 }
 
+type RawInvestmentBreakdownYaml = {
+  "pre-tax-401k-contribution"?: number;
+  "pre-tax-ira-contribution"?: number;
+  "hsa-contribution"?: number;
+  /** @deprecated load migrates into preTax401kContribution when new keys absent */
+  "traditional-retirement"?: number;
+  "roth-retirement"?: number;
+  "taxable-investments"?: number;
+};
+
+function migrateInvestOverrideFieldKeys(fields: string[]): string[] {
+  const next = fields.map((key) =>
+    key === "traditional-retirement" ? "pre-tax-401k-contribution" : key
+  );
+  return [...new Set(next)];
+}
+
 function parseInvestmentBreakdown(
-  rawBreakdown:
-    | {
-        "traditional-retirement"?: number;
-        "roth-retirement"?: number;
-        "taxable-investments"?: number;
-      }
-    | undefined,
+  rawBreakdown: RawInvestmentBreakdownYaml | undefined,
   legacyInvest = 0
 ): InvestmentBreakdown {
-  if (rawBreakdown) {
+  if (!rawBreakdown) {
     return {
-      traditionalRetirement: rawBreakdown["traditional-retirement"] ?? 0,
-      rothRetirement: rawBreakdown["roth-retirement"] ?? 0,
-      taxableInvestments: rawBreakdown["taxable-investments"] ?? 0,
+      preTax401kContribution: 0,
+      preTaxIraContribution: 0,
+      hsaContribution: 0,
+      rothRetirement: 0,
+      taxableInvestments: legacyInvest,
     };
   }
 
+  const hasExplicit401k =
+    rawBreakdown["pre-tax-401k-contribution"] !== undefined;
+  const hasExplicitIra =
+    rawBreakdown["pre-tax-ira-contribution"] !== undefined;
+  const legacyTraditional = rawBreakdown["traditional-retirement"];
+
+  let preTax401k = rawBreakdown["pre-tax-401k-contribution"] ?? 0;
+  let preTaxIra = rawBreakdown["pre-tax-ira-contribution"] ?? 0;
+
+  if (!hasExplicit401k && !hasExplicitIra && legacyTraditional !== undefined) {
+    preTax401k = legacyTraditional;
+    preTaxIra = 0;
+  }
+
   return {
-    traditionalRetirement: 0,
-    rothRetirement: 0,
-    taxableInvestments: legacyInvest,
+    preTax401kContribution: preTax401k,
+    preTaxIraContribution: preTaxIra,
+    hsaContribution: rawBreakdown["hsa-contribution"] ?? 0,
+    rothRetirement: rawBreakdown["roth-retirement"] ?? 0,
+    taxableInvestments: rawBreakdown["taxable-investments"] ?? 0,
   };
 }
 
-function yamlToScenario(raw: ScenarioYaml): Scenario {
+export function yamlToScenario(raw: ScenarioYaml): Scenario {
   const si = raw["scenario-info"] ?? {};
   const a = raw.assumptions ?? {};
   const hm = raw["household-members"] ?? [];
@@ -85,26 +118,49 @@ function yamlToScenario(raw: ScenarioYaml): Scenario {
     );
     existingByYear.set(y, {
       year: y,
+      filingStatus: normalizeFilingStatus(yr["filing-status"]),
       wageIncome: { ...(yr["wage-income"] ?? {}) },
+      socialSecurityBenefits: {
+        ...(yr["social-security-benefits"] ?? {}),
+      },
       otherIncome: {
-        dividendIncome: yr["other-income"]?.["dividend-income"] ?? 0,
+        preTaxDistributions:
+          yr["other-income"]?.["pre-tax-distributions"] ?? 0,
+        rothDistributions:
+          yr["other-income"]?.["roth-distributions"] ?? 0,
+        qualifiedDividends:
+          yr["other-income"]?.["qualified-dividends"] ?? 0,
+        ordinaryDividends:
+          yr["other-income"]?.["ordinary-dividends"] ??
+          yr["other-income"]?.["dividend-income"] ??
+          0,
         interestIncome: yr["other-income"]?.["interest-income"] ?? 0,
         longTermCapitalGains:
           yr["other-income"]?.["long-term-capital-gains"] ?? 0,
         shortTermCapitalGains:
           yr["other-income"]?.["short-term-capital-gains"] ?? 0,
       },
-      expenses: {
-        householdExpenses: yr.expenses?.["household-expenses"] ?? 0,
-        taxes: yr.expenses?.taxes ?? 0,
-        otherExpenses: yr.expenses?.["other-expenses"] ?? 0,
+      misc: {
+        rothConversions: yr.misc?.["roth-conversions"] ?? 0,
       },
+      expenses: expensesWithSyncedTaxTotal({
+        householdExpenses: yr.expenses?.["household-expenses"] ?? 0,
+        selectedFederalTaxAmount:
+          yr.expenses?.["selected-federal-tax-amount"] ?? 0,
+        federalTaxSource: yr.expenses?.["federal-tax-source"] ?? "manual",
+        stateLocalTaxLiability:
+          yr.expenses?.["state-local-tax-liability"] ?? 0,
+        taxes: 0,
+        otherExpenses: yr.expenses?.["other-expenses"] ?? 0,
+      }),
       modifyInvestmentDetails,
       investmentBreakdown,
       eraMetadata: eraMeta
         ? {
             eraId: eraMeta["era-id"] ?? "",
-            overriddenFields: eraMeta["overridden-fields"] ?? [],
+            overriddenFields: migrateInvestOverrideFieldKeys(
+              eraMeta["overridden-fields"] ?? []
+            ),
           }
         : undefined,
     });
@@ -132,18 +188,39 @@ function yamlToScenario(raw: ScenarioYaml): Scenario {
       startYear: er["start-year"] ?? yearStart,
       endYear: er["end-year"] ?? yearEnd,
       eraFacts: {
+        filingStatus: normalizeFilingStatus(ef?.["filing-status"]),
         wageIncome: ef?.["wage-income"] ?? {},
+        socialSecurityBenefits: {
+          ...(ef?.["social-security-benefits"] ?? {}),
+        },
         otherIncome: {
-          dividendIncome: ef?.["other-income"]?.["dividend-income"] ?? 0,
+          preTaxDistributions:
+            ef?.["other-income"]?.["pre-tax-distributions"] ?? 0,
+          rothDistributions:
+            ef?.["other-income"]?.["roth-distributions"] ?? 0,
+          qualifiedDividends:
+            ef?.["other-income"]?.["qualified-dividends"] ?? 0,
+          ordinaryDividends:
+            ef?.["other-income"]?.["ordinary-dividends"] ??
+            ef?.["other-income"]?.["dividend-income"] ??
+            0,
           interestIncome: ef?.["other-income"]?.["interest-income"] ?? 0,
           longTermCapitalGains: ef?.["other-income"]?.["long-term-capital-gains"] ?? 0,
           shortTermCapitalGains: ef?.["other-income"]?.["short-term-capital-gains"] ?? 0,
         },
-        expenses: {
-          householdExpenses: ef?.expenses?.["household-expenses"] ?? 0,
-          taxes: ef?.expenses?.taxes ?? 0,
-          otherExpenses: ef?.expenses?.["other-expenses"] ?? 0,
+        misc: {
+          rothConversions: ef?.misc?.["roth-conversions"] ?? 0,
         },
+        expenses: expensesWithSyncedTaxTotal({
+          householdExpenses: ef?.expenses?.["household-expenses"] ?? 0,
+          selectedFederalTaxAmount:
+            ef?.expenses?.["selected-federal-tax-amount"] ?? 0,
+          federalTaxSource: ef?.expenses?.["federal-tax-source"] ?? "manual",
+          stateLocalTaxLiability:
+            ef?.expenses?.["state-local-tax-liability"] ?? 0,
+          taxes: 0,
+          otherExpenses: ef?.expenses?.["other-expenses"] ?? 0,
+        }),
         modifyInvestmentDetails: eraModify,
         investmentBreakdown,
       },
@@ -169,7 +246,7 @@ function yamlToScenario(raw: ScenarioYaml): Scenario {
   };
 }
 
-function scenarioToYaml(s: Scenario): ScenarioYaml {
+export function scenarioToYaml(s: Scenario): ScenarioYaml {
   const incomeEarnerIds = s.householdMembers
     .filter((m) => m.incomeEarner)
     .map((m) => m.id);
@@ -178,20 +255,33 @@ function scenarioToYaml(s: Scenario): ScenarioYaml {
 
   const years: YamlYear[] = s.years.map((yr) => {
     const wageIncome: Record<string, number> = {};
+    const socialSecurityBenefits: Record<string, number> = {};
     for (const id of incomeEarnerIds) {
       wageIncome[id] = yr.wageIncome[id] ?? 0;
+      socialSecurityBenefits[id] = yr.socialSecurityBenefits[id] ?? 0;
     }
     const row: YamlYear = {
       year: yr.year,
+      "filing-status": yr.filingStatus,
       "wage-income": wageIncome,
+      "social-security-benefits": socialSecurityBenefits,
       "other-income": {
-        "dividend-income": yr.otherIncome.dividendIncome,
+        "pre-tax-distributions": yr.otherIncome.preTaxDistributions,
+        "roth-distributions": yr.otherIncome.rothDistributions,
+        "qualified-dividends": yr.otherIncome.qualifiedDividends,
+        "ordinary-dividends": yr.otherIncome.ordinaryDividends,
         "interest-income": yr.otherIncome.interestIncome,
         "long-term-capital-gains": yr.otherIncome.longTermCapitalGains,
         "short-term-capital-gains": yr.otherIncome.shortTermCapitalGains,
       },
+      misc: {
+        "roth-conversions": yr.misc.rothConversions,
+      },
       expenses: {
         "household-expenses": yr.expenses.householdExpenses,
+        "selected-federal-tax-amount": yr.expenses.selectedFederalTaxAmount,
+        "federal-tax-source": yr.expenses.federalTaxSource,
+        "state-local-tax-liability": yr.expenses.stateLocalTaxLiability,
         taxes: yr.expenses.taxes,
         "other-expenses": yr.expenses.otherExpenses,
       },
@@ -199,8 +289,11 @@ function scenarioToYaml(s: Scenario): ScenarioYaml {
     if (yr.modifyInvestmentDetails) {
       row["modify-investment-details"] = true;
       row["investment-breakdown"] = {
-        "traditional-retirement":
-          yr.investmentBreakdown.traditionalRetirement,
+        "pre-tax-401k-contribution":
+          yr.investmentBreakdown.preTax401kContribution,
+        "pre-tax-ira-contribution":
+          yr.investmentBreakdown.preTaxIraContribution,
+        "hsa-contribution": yr.investmentBreakdown.hsaContribution,
         "roth-retirement": yr.investmentBreakdown.rothRetirement,
         "taxable-investments": yr.investmentBreakdown.taxableInvestments,
       };
@@ -216,16 +309,32 @@ function scenarioToYaml(s: Scenario): ScenarioYaml {
 
   const eras = (s.eras ?? []).map((e) => {
     const facts = e.eraFacts;
+    const eraSocialSecurity: Record<string, number> = {};
+    for (const id of incomeEarnerIds) {
+      eraSocialSecurity[id] = facts.socialSecurityBenefits[id] ?? 0;
+    }
     const ef: Record<string, unknown> = {
+      "filing-status": facts.filingStatus,
       "wage-income": facts.wageIncome,
+      "social-security-benefits": eraSocialSecurity,
       "other-income": {
-        "dividend-income": facts.otherIncome.dividendIncome,
+        "pre-tax-distributions": facts.otherIncome.preTaxDistributions,
+        "roth-distributions": facts.otherIncome.rothDistributions,
+        "qualified-dividends": facts.otherIncome.qualifiedDividends,
+        "ordinary-dividends": facts.otherIncome.ordinaryDividends,
         "interest-income": facts.otherIncome.interestIncome,
         "long-term-capital-gains": facts.otherIncome.longTermCapitalGains,
         "short-term-capital-gains": facts.otherIncome.shortTermCapitalGains,
       },
+      misc: {
+        "roth-conversions": facts.misc.rothConversions,
+      },
       expenses: {
         "household-expenses": facts.expenses.householdExpenses,
+        "selected-federal-tax-amount":
+          facts.expenses.selectedFederalTaxAmount,
+        "federal-tax-source": facts.expenses.federalTaxSource,
+        "state-local-tax-liability": facts.expenses.stateLocalTaxLiability,
         taxes: facts.expenses.taxes,
         "other-expenses": facts.expenses.otherExpenses,
       },
@@ -233,8 +342,11 @@ function scenarioToYaml(s: Scenario): ScenarioYaml {
     if (facts.modifyInvestmentDetails) {
       ef["modify-investment-details"] = true;
       ef["investment-breakdown"] = {
-        "traditional-retirement":
-          facts.investmentBreakdown.traditionalRetirement,
+        "pre-tax-401k-contribution":
+          facts.investmentBreakdown.preTax401kContribution,
+        "pre-tax-ira-contribution":
+          facts.investmentBreakdown.preTaxIraContribution,
+        "hsa-contribution": facts.investmentBreakdown.hsaContribution,
         "roth-retirement": facts.investmentBreakdown.rothRetirement,
         "taxable-investments": facts.investmentBreakdown.taxableInvestments,
       };

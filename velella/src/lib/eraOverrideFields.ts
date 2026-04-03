@@ -6,6 +6,8 @@ import type {
   HouseholdMember,
   YearInput,
 } from "../types/scenario";
+import { filingStatusToIndex, indexToFilingStatus } from "./filingStatus";
+import { expensesWithSyncedTaxTotal } from "./yearFacts";
 
 export interface EraOverrideFieldDescriptor {
   fieldKey: YearFactsFieldKey;
@@ -51,25 +53,133 @@ export function buildEraOverrideFieldDescriptors(
     } satisfies EraOverrideFieldDescriptor;
   });
 
+  const socialSecurityFields = incomeEarners.map((member) => {
+    const memberLabel = member.nickname || "Member";
+    const fieldKey =
+      `social-security-benefits-${member.id}` as YearFactsFieldKey;
+
+    return {
+      fieldKey,
+      fieldLabel: `${memberLabel} Social Security`,
+      yearRowLabel: buildYearRowLabel("Social Security"),
+      readEraValue: (eraFacts) =>
+        eraFacts.socialSecurityBenefits[member.id] ?? 0,
+      writeEraValue: (eraFacts, value) => ({
+        ...eraFacts,
+        socialSecurityBenefits: {
+          ...eraFacts.socialSecurityBenefits,
+          [member.id]: value,
+        },
+      }),
+      readYearValue: (yearInput) =>
+        yearInput.socialSecurityBenefits[member.id] ?? 0,
+      writeYearValue: (yearInput, value) => ({
+        ...yearInput,
+        socialSecurityBenefits: {
+          ...yearInput.socialSecurityBenefits,
+          [member.id]: value,
+        },
+      }),
+    } satisfies EraOverrideFieldDescriptor;
+  });
+
   const otherFields: EraOverrideFieldDescriptor[] = [
     {
-      fieldKey: "dividend-income",
-      fieldLabel: "Dividend Income",
-      yearRowLabel: buildYearRowLabel("Dividend Income"),
-      readEraValue: (eraFacts) => eraFacts.otherIncome.dividendIncome,
+      fieldKey: "pre-tax-distributions",
+      fieldLabel: "Pre-Tax Distributions",
+      yearRowLabel: buildYearRowLabel("Pre-Tax Distributions"),
+      readEraValue: (eraFacts) => eraFacts.otherIncome.preTaxDistributions,
       writeEraValue: (eraFacts, value) => ({
         ...eraFacts,
         otherIncome: {
           ...eraFacts.otherIncome,
-          dividendIncome: value,
+          preTaxDistributions: value,
         },
       }),
-      readYearValue: (yearInput) => yearInput.otherIncome.dividendIncome,
+      readYearValue: (yearInput) => yearInput.otherIncome.preTaxDistributions,
       writeYearValue: (yearInput, value) => ({
         ...yearInput,
         otherIncome: {
           ...yearInput.otherIncome,
-          dividendIncome: value,
+          preTaxDistributions: value,
+        },
+      }),
+    },
+    {
+      fieldKey: "roth-distributions",
+      fieldLabel: "Roth Distributions",
+      yearRowLabel: buildYearRowLabel("Roth Distributions"),
+      readEraValue: (eraFacts) => eraFacts.otherIncome.rothDistributions,
+      writeEraValue: (eraFacts, value) => ({
+        ...eraFacts,
+        otherIncome: {
+          ...eraFacts.otherIncome,
+          rothDistributions: value,
+        },
+      }),
+      readYearValue: (yearInput) => yearInput.otherIncome.rothDistributions,
+      writeYearValue: (yearInput, value) => ({
+        ...yearInput,
+        otherIncome: {
+          ...yearInput.otherIncome,
+          rothDistributions: value,
+        },
+      }),
+    },
+    {
+      fieldKey: "roth-conversions",
+      fieldLabel: "Roth Conversions",
+      yearRowLabel: buildYearRowLabel("Roth Conversions"),
+      readEraValue: (eraFacts) => eraFacts.misc.rothConversions,
+      writeEraValue: (eraFacts, value) => ({
+        ...eraFacts,
+        misc: { ...eraFacts.misc, rothConversions: value },
+      }),
+      readYearValue: (yearInput) => yearInput.misc.rothConversions,
+      writeYearValue: (yearInput, value) => ({
+        ...yearInput,
+        misc: { ...yearInput.misc, rothConversions: value },
+      }),
+    },
+    {
+      fieldKey: "qualified-dividends",
+      fieldLabel: "Qualified Dividends",
+      yearRowLabel: buildYearRowLabel("Qualified Dividends"),
+      readEraValue: (eraFacts) => eraFacts.otherIncome.qualifiedDividends,
+      writeEraValue: (eraFacts, value) => ({
+        ...eraFacts,
+        otherIncome: {
+          ...eraFacts.otherIncome,
+          qualifiedDividends: value,
+        },
+      }),
+      readYearValue: (yearInput) => yearInput.otherIncome.qualifiedDividends,
+      writeYearValue: (yearInput, value) => ({
+        ...yearInput,
+        otherIncome: {
+          ...yearInput.otherIncome,
+          qualifiedDividends: value,
+        },
+      }),
+    },
+    {
+      fieldKey: "ordinary-dividends",
+      fieldLabel: "Ordinary Dividends",
+      yearRowLabel: buildYearRowLabel("Ordinary Dividends"),
+      readEraValue: (eraFacts) => eraFacts.otherIncome.ordinaryDividends,
+      writeEraValue: (eraFacts, value) => ({
+        ...eraFacts,
+        otherIncome: {
+          ...eraFacts.otherIncome,
+          ordinaryDividends: value,
+        },
+      }),
+      readYearValue: (yearInput) => yearInput.otherIncome.ordinaryDividends,
+      writeYearValue: (yearInput, value) => ({
+        ...yearInput,
+        otherIncome: {
+          ...yearInput.otherIncome,
+          ordinaryDividends: value,
         },
       }),
     },
@@ -96,8 +206,8 @@ export function buildEraOverrideFieldDescriptors(
     },
     {
       fieldKey: "short-term-capital-gains",
-      fieldLabel: "Capital Gains (Short Term)",
-      yearRowLabel: buildYearRowLabel("Capital Gains (Short Term)"),
+      fieldLabel: "Realized Taxable Gains (Short Term)",
+      yearRowLabel: buildYearRowLabel("Realized Taxable Gains (Short Term)"),
       readEraValue: (eraFacts) => eraFacts.otherIncome.shortTermCapitalGains,
       writeEraValue: (eraFacts, value) => ({
         ...eraFacts,
@@ -117,8 +227,8 @@ export function buildEraOverrideFieldDescriptors(
     },
     {
       fieldKey: "long-term-capital-gains",
-      fieldLabel: "Capital Gains (Long Term)",
-      yearRowLabel: buildYearRowLabel("Capital Gains (Long Term)"),
+      fieldLabel: "Realized Taxable Gains (Long Term)",
+      yearRowLabel: buildYearRowLabel("Realized Taxable Gains (Long Term)"),
       readEraValue: (eraFacts) => eraFacts.otherIncome.longTermCapitalGains,
       writeEraValue: (eraFacts, value) => ({
         ...eraFacts,
@@ -158,24 +268,62 @@ export function buildEraOverrideFieldDescriptors(
       }),
     },
     {
-      fieldKey: "taxes",
-      fieldLabel: "Taxes",
-      yearRowLabel: buildYearRowLabel("Taxes"),
-      readEraValue: (eraFacts) => eraFacts.expenses.taxes,
+      fieldKey: "filing-status",
+      fieldLabel: "Tax filing status",
+      yearRowLabel: buildYearRowLabel("Tax filing status"),
+      readEraValue: (eraFacts) => filingStatusToIndex(eraFacts.filingStatus),
       writeEraValue: (eraFacts, value) => ({
         ...eraFacts,
-        expenses: {
-          ...eraFacts.expenses,
-          taxes: value,
-        },
+        filingStatus: indexToFilingStatus(value),
       }),
-      readYearValue: (yearInput) => yearInput.expenses.taxes,
+      readYearValue: (yearInput) => filingStatusToIndex(yearInput.filingStatus),
       writeYearValue: (yearInput, value) => ({
         ...yearInput,
-        expenses: {
+        filingStatus: indexToFilingStatus(value),
+      }),
+    },
+    {
+      fieldKey: "selected-federal-tax-amount",
+      fieldLabel: "Taxes: Federal",
+      yearRowLabel: buildYearRowLabel("Taxes: Federal"),
+      readEraValue: (eraFacts) => eraFacts.expenses.selectedFederalTaxAmount,
+      writeEraValue: (eraFacts, value) => ({
+        ...eraFacts,
+        expenses: expensesWithSyncedTaxTotal({
+          ...eraFacts.expenses,
+          selectedFederalTaxAmount: value,
+        }),
+      }),
+      readYearValue: (yearInput) =>
+        yearInput.expenses.selectedFederalTaxAmount,
+      writeYearValue: (yearInput, value) => ({
+        ...yearInput,
+        expenses: expensesWithSyncedTaxTotal({
           ...yearInput.expenses,
-          taxes: value,
-        },
+          selectedFederalTaxAmount: value,
+        }),
+      }),
+    },
+    {
+      fieldKey: "state-local-tax-liability",
+      fieldLabel: "Taxes: State & Local",
+      yearRowLabel: buildYearRowLabel("Taxes: State & Local"),
+      readEraValue: (eraFacts) => eraFacts.expenses.stateLocalTaxLiability,
+      writeEraValue: (eraFacts, value) => ({
+        ...eraFacts,
+        expenses: expensesWithSyncedTaxTotal({
+          ...eraFacts.expenses,
+          stateLocalTaxLiability: value,
+        }),
+      }),
+      readYearValue: (yearInput) =>
+        yearInput.expenses.stateLocalTaxLiability,
+      writeYearValue: (yearInput, value) => ({
+        ...yearInput,
+        expenses: expensesWithSyncedTaxTotal({
+          ...yearInput.expenses,
+          stateLocalTaxLiability: value,
+        }),
       }),
     },
     {
@@ -200,25 +348,74 @@ export function buildEraOverrideFieldDescriptors(
       }),
     },
     {
-      fieldKey: "traditional-retirement",
-      fieldLabel: "Traditional Retirement",
-      yearRowLabel: buildYearRowLabel("Traditional Retirement"),
+      fieldKey: "pre-tax-401k-contribution",
+      fieldLabel: "Pre-Tax 401(k) / 403(b) Contributions",
+      yearRowLabel: buildYearRowLabel(
+        "Pre-Tax 401(k) / 403(b) Contributions"
+      ),
       readEraValue: (eraFacts) =>
-        eraFacts.investmentBreakdown.traditionalRetirement,
+        eraFacts.investmentBreakdown.preTax401kContribution,
       writeEraValue: (eraFacts, value) => ({
         ...eraFacts,
         investmentBreakdown: {
           ...eraFacts.investmentBreakdown,
-          traditionalRetirement: value,
+          preTax401kContribution: value,
         },
       }),
       readYearValue: (yearInput) =>
-        yearInput.investmentBreakdown.traditionalRetirement,
+        yearInput.investmentBreakdown.preTax401kContribution,
       writeYearValue: (yearInput, value) => ({
         ...yearInput,
         investmentBreakdown: {
           ...yearInput.investmentBreakdown,
-          traditionalRetirement: value,
+          preTax401kContribution: value,
+        },
+      }),
+    },
+    {
+      fieldKey: "pre-tax-ira-contribution",
+      fieldLabel: "Traditional IRA Contribution",
+      yearRowLabel: buildYearRowLabel("Traditional IRA Contribution"),
+      readEraValue: (eraFacts) =>
+        eraFacts.investmentBreakdown.preTaxIraContribution,
+      writeEraValue: (eraFacts, value) => ({
+        ...eraFacts,
+        investmentBreakdown: {
+          ...eraFacts.investmentBreakdown,
+          preTaxIraContribution: value,
+        },
+      }),
+      readYearValue: (yearInput) =>
+        yearInput.investmentBreakdown.preTaxIraContribution,
+      writeYearValue: (yearInput, value) => ({
+        ...yearInput,
+        investmentBreakdown: {
+          ...yearInput.investmentBreakdown,
+          preTaxIraContribution: value,
+        },
+      }),
+    },
+    {
+      fieldKey: "hsa-contribution",
+      fieldLabel: "Health Savings Account (HSA) Contributions",
+      yearRowLabel: buildYearRowLabel(
+        "Health Savings Account (HSA) Contributions"
+      ),
+      readEraValue: (eraFacts) => eraFacts.investmentBreakdown.hsaContribution,
+      writeEraValue: (eraFacts, value) => ({
+        ...eraFacts,
+        investmentBreakdown: {
+          ...eraFacts.investmentBreakdown,
+          hsaContribution: value,
+        },
+      }),
+      readYearValue: (yearInput) =>
+        yearInput.investmentBreakdown.hsaContribution,
+      writeYearValue: (yearInput, value) => ({
+        ...yearInput,
+        investmentBreakdown: {
+          ...yearInput.investmentBreakdown,
+          hsaContribution: value,
         },
       }),
     },
@@ -268,5 +465,5 @@ export function buildEraOverrideFieldDescriptors(
     },
   ];
 
-  return [...wageFields, ...otherFields];
+  return [...wageFields, ...socialSecurityFields, ...otherFields];
 }

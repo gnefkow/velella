@@ -63,3 +63,42 @@ textarea.era-pane-narrative-field:focus {
   box-shadow: 0 0 0 1px var(--fg-primary) !important;
   outline: none !important;
 }
+
+/*
+ * EraDetailPane nickname only — no hover/focus ring, no UA outline (ticket 027).
+ * Covers :focus-visible / :active and WebKit -webkit-focus-ring-color.
+ */
+button.era-pane-nickname-field,
+input.era-pane-narrative-field.era-pane-nickname-field {
+  -webkit-tap-highlight-color: transparent !important;
+  -webkit-focus-ring-color: transparent !important;
+}
+
+button.era-pane-nickname-field::-moz-focus-inner {
+  border: 0 !important;
+}
+
+input.era-pane-narrative-field.era-pane-nickname-field:hover:not(:disabled):not(:focus) {
+  box-shadow: none !important;
+}
+
+button.era-pane-nickname-field:hover,
+button.era-pane-nickname-field:focus,
+button.era-pane-nickname-field:focus-visible,
+button.era-pane-nickname-field:active,
+input.era-pane-narrative-field.era-pane-nickname-field:focus,
+input.era-pane-narrative-field.era-pane-nickname-field:focus-visible,
+input.era-pane-narrative-field.era-pane-nickname-field:active {
+  outline: none !important;
+  outline-width: 0 !important;
+  outline-style: none !important;
+  outline-color: transparent !important;
+  outline-offset: 0 !important;
+  box-shadow: none !important;
+}
+
+/* Firefox focus ring */
+button.era-pane-nickname-field:-moz-focusring,
+input.era-pane-narrative-field.era-pane-nickname-field:-moz-focusring {
+  outline: none !important;
+}

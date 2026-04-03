@@ -1,7 +1,8 @@
 import { useState, useCallback, useEffect, useRef } from "react";
 import { Stack, Text } from "../../../../../counterfoil-kit/src/index.ts";
 import type { Era } from "../../types/era";
-import type { Scenario } from "../../types/scenario";
+import { applyFilingStatusGlobally } from "../../lib/filingStatus";
+import type { FilingStatus, Scenario } from "../../types/scenario";
 import EraDetailPane, { type EraDetailPaneHandle } from "../General/EraDetailPane";
 import EraUnsavedChangesModal from "../General/EraUnsavedChangesModal";
 import ErasList from "./ErasList";
@@ -33,6 +34,26 @@ export default function NarrativePage({
   useEffect(() => {
     setLocalScenario(scenario);
   }, [scenario]);
+
+  useEffect(() => {
+    if (!localScenario || !selectedEra) return;
+    const fresh = localScenario.eras?.find((e) => e.id === selectedEra.id);
+    if (fresh && fresh !== selectedEra) {
+      setSelectedEra(fresh);
+    }
+  }, [localScenario, selectedEra]);
+
+  const handleBulkApplyFilingStatus = useCallback(
+    (status: FilingStatus) => {
+      setLocalScenario((current) => {
+        if (!current) return current;
+        const updated = applyFilingStatusGlobally(current, status);
+        void onPersist(updated);
+        return updated;
+      });
+    },
+    [onPersist]
+  );
 
   const handleSave = useCallback(
     (updated: Scenario) => {
@@ -166,6 +187,7 @@ export default function NarrativePage({
           era={selectedEra}
           onClose={requestClosePane}
           onSave={handleSave}
+          onBulkApplyFilingStatus={handleBulkApplyFilingStatus}
         />
       )}
       <EraUnsavedChangesModal

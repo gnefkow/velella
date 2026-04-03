@@ -1,3 +1,8 @@
+import TertiaryNativeSelect from "../ui/TertiaryNativeSelect";
+import {
+  FILING_STATUS_INDEX_SELECT_OPTIONS,
+  TAX_FILING_STATUS_SELECT_CLASSNAME,
+} from "../../lib/filingStatus";
 import EraPaneAmountInput from "./EraPaneAmountInput";
 
 function formatEraRangeLine(
@@ -16,6 +21,8 @@ interface EraOverrideLinkedInputRowProps {
   eraEndYear: number | null;
   value: number;
   onCommit: (value: number) => void;
+  /** When set, value is a filing-status index (0–2), not currency. */
+  variant?: "amount" | "filing-status";
 }
 
 export default function EraOverrideLinkedInputRow({
@@ -24,6 +31,7 @@ export default function EraOverrideLinkedInputRow({
   eraEndYear,
   value,
   onCommit,
+  variant = "amount",
 }: EraOverrideLinkedInputRowProps) {
   const rangeLine = formatEraRangeLine(eraStartYear, eraEndYear);
   const inputLabel = `${fieldLabel}, ${rangeLine}`;
@@ -38,11 +46,22 @@ export default function EraOverrideLinkedInputRow({
             {rangeLine}
           </p>
         </div>
-        <EraPaneAmountInput
-          label={inputLabel}
-          value={value}
-          onCommit={onCommit}
-        />
+        {variant === "filing-status" ? (
+          <TertiaryNativeSelect
+            ariaLabel={inputLabel}
+            value={String(value)}
+            placeholder="Status"
+            options={FILING_STATUS_INDEX_SELECT_OPTIONS}
+            className={TAX_FILING_STATUS_SELECT_CLASSNAME}
+            onValueChange={(next) => onCommit(Number(next))}
+          />
+        ) : (
+          <EraPaneAmountInput
+            label={inputLabel}
+            value={value}
+            onCommit={onCommit}
+          />
+        )}
       </div>
     </div>
   );

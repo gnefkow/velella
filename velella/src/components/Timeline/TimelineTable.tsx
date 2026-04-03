@@ -31,7 +31,7 @@ export interface TimelineRow {
   totalIncome: number;
   totalExpenses: number;
   availableToInvest: number;
-  invest: number;
+  investDivestNet: number;
   portfolioEnd: number;
   cPop: number | null;
   yearInput: YearInput;
@@ -95,7 +95,7 @@ function buildRows(
       totalIncome: yr.totalIncome,
       totalExpenses: yr.totalExpenses,
       availableToInvest: yr.availableToInvest,
-      invest: yr.invest,
+      investDivestNet: yr.investDivestNet,
       portfolioEnd: yr.portfolioEnd,
       cPop: yr.cPop,
       yearInput,
@@ -259,9 +259,9 @@ export default function TimelineTable({
         header: "Avail. to invest",
         cell: (info) => formatCurrency(info.getValue()),
       }),
-      columnHelper.accessor("invest", {
-        id: "invest",
-        header: "Invest",
+      columnHelper.accessor("investDivestNet", {
+        id: "invest-divest-net",
+        header: "Invest/Divest",
         cell: (info) => formatCurrency(info.getValue()),
       }),
       columnHelper.accessor("portfolioEnd", {

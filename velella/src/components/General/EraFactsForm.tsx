@@ -2,10 +2,16 @@ import { Button, Text } from "../../../../../counterfoil-kit/src/index.ts";
 import {
   ChevronDown,
   ChevronRight,
+  Link2,
 } from "lucide-react";
 import { useMemo, useState, type ReactNode } from "react";
 import type { EraFacts, YearFactsFieldKey } from "../../types/era";
-import type { HouseholdMember } from "../../types/scenario";
+import type { FilingStatus, HouseholdMember } from "../../types/scenario";
+import {
+  FILING_STATUS_SELECT_OPTIONS,
+  labelForFilingStatus,
+  TAX_FILING_STATUS_SELECT_CLASSNAME,
+} from "../../lib/filingStatus";
 import {
   availableToInvestFromYearInput,
   effectiveInvestFromYearInput,
@@ -15,14 +21,39 @@ import {
 } from "../../lib/invest";
 import type { EraOverrideDraft } from "../../lib/eraOverrideDraft";
 import type { EraOverrideFieldDescriptor } from "../../lib/eraOverrideFields";
-import { calculateYearFacts } from "../../lib/yearFacts";
+import { cashflowSummaryFromYearInput } from "../../lib/cashflowSummary";
+import {
+  calculateYearFacts,
+  ESTIMATED_FEDERAL_TAX_EXPENSE,
+  expensesWithSyncedTaxTotal,
+} from "../../lib/yearFacts";
+import FilingStatusApplyModal from "./FilingStatusApplyModal";
 import EraInvestmentBreakdownModal from "./EraInvestmentBreakdownModal";
 import EraOverridesModal, {
   type EraOverridesModalSaveResult,
 } from "./EraOverridesModal";
+import EraCashflowSummarySection from "./EraCashflowSummarySection";
 import EraPaneAmountInput from "./EraPaneAmountInput";
 import EraPaneHelpButton from "./EraPaneHelpButton";
 import EraPaneOverrideSummary from "./EraPaneOverrideSummary";
+import TertiaryNativeSelect from "../ui/TertiaryNativeSelect";
+import EraSocialSecurityEligibilityNotices from "./EraSocialSecurityEligibilityNotices";
+import EraSocialSecurityFieldRows from "./EraSocialSecurityFieldRows";
+import EraPreTaxDistributionEligibilityNotices from "./EraPreTaxDistributionEligibilityNotices";
+import EraPreTaxDistributionFieldRow from "./EraPreTaxDistributionFieldRow";
+import EraRothDistributionsFieldRow from "./EraRothDistributionsFieldRow";
+import NoOverridesYetModal from "./NoOverridesYetModal";
+import UseEstimatedFederalTaxControl from "./UseEstimatedFederalTaxControl";
+import UseFederalTaxEstimateModal from "./UseFederalTaxEstimateModal";
+import {
+  eraIncludesPreTaxDistributionEligibleYearForMember,
+} from "../../lib/preTaxDistributionEligibility";
+import { ROTH_CONVERSIONS_DESCRIPTION } from "../../lib/rothConversions";
+import {
+  HSA_CONTRIBUTION_DESCRIPTION,
+  PRE_TAX_401K_CONTRIBUTION_DESCRIPTION,
+  PRE_TAX_IRA_CONTRIBUTION_DESCRIPTION,
+} from "../../lib/investmentContributions";
 
 interface EraFactsFormProps {
   eraFacts: EraFacts;
@@ -39,6 +70,8 @@ interface EraFactsFormProps {
     fieldKey: YearFactsFieldKey,
     nextValuesByYear: Record<number, number> | null
   ) => void;
+  /** Batch-sets filing status on every year and era; optional for isolated previews. */
+  onBulkApplyFilingStatus?: (status: FilingStatus) => void;
 }
 
 interface EraPaneSectionHeaderProps {
@@ -170,9 +203,16 @@ export default function EraFactsForm({
   draftOverridesByField,
   overrideSummariesByField,
   onSaveFieldOverrides,
+  onBulkApplyFilingStatus,
 }: EraFactsFormProps) {
   const [isMoreIncomeOpen, setIsMoreIncomeOpen] = useState(false);
   const [showRemoveBreakdownModal, setShowRemoveBreakdownModal] = useState(false);
+  const [showFederalTaxEstimateModal, setShowFederalTaxEstimateModal] =
+    useState(false);
+  const [showNoOverridesYetModal, setShowNoOverridesYetModal] = useState(false);
+  const [filingApplyTarget, setFilingApplyTarget] = useState<FilingStatus | null>(
+    null
+  );
   const [selectedOverrideFieldKey, setSelectedOverrideFieldKey] =
     useState<YearFactsFieldKey | null>(null);
 
@@ -223,14 +263,33 @@ export default function EraFactsForm({
     () => availableToInvestFromYearInput(eraAsYearInput),
     [eraAsYearInput]
   );
+  const cashflowSummary = useMemo(
+    () => cashflowSummaryFromYearInput(eraAsYearInput),
+    [eraAsYearInput]
+  );
   const effectiveInvest = useMemo(
     () => effectiveInvestFromYearInput(eraAsYearInput),
     [eraAsYearInput]
   );
   const investmentDifference =
     investmentDifferenceFromYearInput(eraAsYearInput);
+  const showPreTaxDistributionsOutsideAccordion =
+    eraStartYear != null &&
+    eraEndYear != null &&
+    incomeEarners.some((member) =>
+      eraIncludesPreTaxDistributionEligibleYearForMember(
+        member.birthday,
+        eraStartYear,
+        eraEndYear
+      )
+    );
   const moreIncomeTotal =
-    eraFacts.otherIncome.dividendIncome +
+    (showPreTaxDistributionsOutsideAccordion
+      ? 0
+      : eraFacts.otherIncome.preTaxDistributions) +
+    eraFacts.otherIncome.rothDistributions +
+    eraFacts.otherIncome.qualifiedDividends +
+    eraFacts.otherIncome.ordinaryDividends +
     eraFacts.otherIncome.interestIncome +
     eraFacts.otherIncome.shortTermCapitalGains +
     eraFacts.otherIncome.longTermCapitalGains;
@@ -270,6 +329,44 @@ export default function EraFactsForm({
     );
   };
 
+  const usingFederalTaxEstimate =
+    eraFacts.expenses.federalTaxSource === "use-estimate";
+
+  const applyFederalTaxEstimate = () => {
+    onUpdateEraFacts((prev) => ({
+      ...prev,
+      expenses: expensesWithSyncedTaxTotal({
+        ...prev.expenses,
+        federalTaxSource: "use-estimate",
+        selectedFederalTaxAmount: 0,
+      }),
+    }));
+  };
+
+  const applyManualFederalTax = () => {
+    onUpdateEraFacts((prev) => ({
+      ...prev,
+      expenses: expensesWithSyncedTaxTotal({
+        ...prev.expenses,
+        federalTaxSource: "manual",
+        selectedFederalTaxAmount: ESTIMATED_FEDERAL_TAX_EXPENSE,
+      }),
+    }));
+  };
+
+  const handleFederalTaxEstimateToggle = (nextChecked: boolean) => {
+    if (nextChecked) {
+      if (eraFacts.expenses.selectedFederalTaxAmount !== 0) {
+        setShowFederalTaxEstimateModal(true);
+        return;
+      }
+      applyFederalTaxEstimate();
+      return;
+    }
+
+    applyManualFederalTax();
+  };
+
   return (
     <>
       <div className="flex min-w-0 w-full flex-col">
@@ -277,7 +374,7 @@ export default function EraFactsForm({
           <EraPaneSectionHeader
             title="Income"
             total={totalIncome}
-            description="The sum of wages and all other income sources in this era."
+            description="The sum of wages, Social Security benefits, and all other income sources in this era."
           />
           {incomeEarners.map((member) => {
             const label = `${member.nickname || "Member"} Wages`;
@@ -302,6 +399,35 @@ export default function EraFactsForm({
             );
           })}
 
+          <EraSocialSecurityEligibilityNotices
+            incomeEarners={incomeEarners}
+            eraStartYear={eraStartYear}
+            eraEndYear={eraEndYear}
+          />
+
+          <EraSocialSecurityFieldRows
+            incomeEarners={incomeEarners}
+            eraFacts={eraFacts}
+            eraStartYear={eraStartYear}
+            eraEndYear={eraEndYear}
+            onUpdateEraFacts={onUpdateEraFacts}
+            renderOverrideAwareValue={renderOverrideAwareValue}
+          />
+
+          <EraPreTaxDistributionEligibilityNotices
+            incomeEarners={incomeEarners}
+            eraStartYear={eraStartYear}
+            eraEndYear={eraEndYear}
+          />
+
+          {showPreTaxDistributionsOutsideAccordion ? (
+            <EraPreTaxDistributionFieldRow
+              eraFacts={eraFacts}
+              onUpdateEraFacts={onUpdateEraFacts}
+              renderOverrideAwareValue={renderOverrideAwareValue}
+            />
+          ) : null}
+
           <div className="flex w-full min-w-0 items-center justify-between gap-4">
             <div className="flex min-w-0 flex-1 items-center gap-1">
               <button
@@ -322,7 +448,11 @@ export default function EraFactsForm({
               </button>
               <EraPaneHelpButton
                 label="Show explanation for more income sources"
-                description="The combined total of dividend income, interest income, and capital gains."
+                description={
+                  showPreTaxDistributionsOutsideAccordion
+                    ? "The combined total of Roth distributions, qualified dividends, ordinary dividends, interest income, and capital gains."
+                    : "The combined total of pre-tax distributions, Roth distributions, qualified dividends, ordinary dividends, interest income, and capital gains."
+                }
               />
             </div>
 
@@ -346,20 +476,104 @@ export default function EraFactsForm({
 
           {isMoreIncomeOpen ? (
             <div className="flex w-full min-w-0 flex-col gap-0 rounded-md bg-bg-secondary px-2 py-3">
+              <Text
+                as="h4"
+                size="h5"
+                hierarchy="primary"
+                weight="heavy"
+                className="w-full pb-1 pt-0"
+              >
+                Portfolio Withdrawals:
+              </Text>
+              {!showPreTaxDistributionsOutsideAccordion ? (
+                <EraPreTaxDistributionFieldRow
+                  eraFacts={eraFacts}
+                  onUpdateEraFacts={onUpdateEraFacts}
+                  renderOverrideAwareValue={renderOverrideAwareValue}
+                />
+              ) : null}
+              <EraRothDistributionsFieldRow
+                eraFacts={eraFacts}
+                onUpdateEraFacts={onUpdateEraFacts}
+                renderOverrideAwareValue={renderOverrideAwareValue}
+              />
               <EraPaneFactRow
-                label="Dividend Income"
-                description="Income from dividends."
+                label="Realized Taxable Gains (Short Term)"
+                description="Capital gains income for assets sold that were held for less than one year."
               >
                 {renderOverrideAwareValue(
-                  "dividend-income",
-                  "Dividend Income",
-                  eraFacts.otherIncome.dividendIncome,
+                  "short-term-capital-gains",
+                  "Realized Taxable Gains (Short Term)",
+                  eraFacts.otherIncome.shortTermCapitalGains,
                   (value) =>
                     onUpdateEraFacts((prev) => ({
                       ...prev,
                       otherIncome: {
                         ...prev.otherIncome,
-                        dividendIncome: value,
+                        shortTermCapitalGains: value,
+                      },
+                    }))
+                )}
+              </EraPaneFactRow>
+              <EraPaneFactRow
+                label="Realized Taxable Gains (Long Term)"
+                description="Capital gains income for assets sold that were held for more than one year."
+              >
+                {renderOverrideAwareValue(
+                  "long-term-capital-gains",
+                  "Realized Taxable Gains (Long Term)",
+                  eraFacts.otherIncome.longTermCapitalGains,
+                  (value) =>
+                    onUpdateEraFacts((prev) => ({
+                      ...prev,
+                      otherIncome: {
+                        ...prev.otherIncome,
+                        longTermCapitalGains: value,
+                      },
+                    }))
+                )}
+              </EraPaneFactRow>
+              <Text
+                as="h4"
+                size="h5"
+                hierarchy="primary"
+                weight="heavy"
+                className="w-full pb-1 pt-3"
+              >
+                Other Portfolio Income
+              </Text>
+              <EraPaneFactRow
+                label="Qualified Dividends"
+                description="Dividend income eligible for preferential tax treatment."
+              >
+                {renderOverrideAwareValue(
+                  "qualified-dividends",
+                  "Qualified Dividends",
+                  eraFacts.otherIncome.qualifiedDividends,
+                  (value) =>
+                    onUpdateEraFacts((prev) => ({
+                      ...prev,
+                      otherIncome: {
+                        ...prev.otherIncome,
+                        qualifiedDividends: value,
+                      },
+                    }))
+                )}
+              </EraPaneFactRow>
+              <EraPaneFactRow
+                label="Ordinary Dividends"
+                description="Dividend income taxed at ordinary income rates."
+              >
+                {renderOverrideAwareValue(
+                  "ordinary-dividends",
+                  "Ordinary Dividends",
+                  eraFacts.otherIncome.ordinaryDividends,
+                  (value) =>
+                    onUpdateEraFacts((prev) => ({
+                      ...prev,
+                      otherIncome: {
+                        ...prev.otherIncome,
+                        ordinaryDividends: value,
                       },
                     }))
                 )}
@@ -378,42 +592,6 @@ export default function EraFactsForm({
                       otherIncome: {
                         ...prev.otherIncome,
                         interestIncome: value,
-                      },
-                    }))
-                )}
-              </EraPaneFactRow>
-              <EraPaneFactRow
-                label="Capital Gains (Short Term)"
-                description="Capital gains income for assets sold that were held for less than one year."
-              >
-                {renderOverrideAwareValue(
-                  "short-term-capital-gains",
-                  "Capital Gains (Short Term)",
-                  eraFacts.otherIncome.shortTermCapitalGains,
-                  (value) =>
-                    onUpdateEraFacts((prev) => ({
-                      ...prev,
-                      otherIncome: {
-                        ...prev.otherIncome,
-                        shortTermCapitalGains: value,
-                      },
-                    }))
-                )}
-              </EraPaneFactRow>
-              <EraPaneFactRow
-                label="Capital Gains (Long Term)"
-                description="Capital gains income for assets sold that were held for more than one year."
-              >
-                {renderOverrideAwareValue(
-                  "long-term-capital-gains",
-                  "Capital Gains (Long Term)",
-                  eraFacts.otherIncome.longTermCapitalGains,
-                  (value) =>
-                    onUpdateEraFacts((prev) => ({
-                      ...prev,
-                      otherIncome: {
-                        ...prev.otherIncome,
-                        longTermCapitalGains: value,
                       },
                     }))
                 )}
@@ -447,23 +625,116 @@ export default function EraFactsForm({
             )}
           </EraPaneFactRow>
           <EraPaneFactRow
-            label="Taxes"
-            description="Estimated tax expenses."
+            label="Tax filing status"
+            description="Federal income tax filing status used for tax estimates."
+          >
+            {overrideSummariesByField["filing-status"] ? (
+              <EraPaneOverrideSummary
+                fieldLabel="Tax filing status"
+                summary={overrideSummariesByField["filing-status"]!}
+                onEdit={() => openOverridesForField("filing-status")}
+              />
+            ) : (
+              <div className="flex shrink-0 justify-end">
+                <TertiaryNativeSelect
+                  ariaLabel="Tax filing status for this era"
+                  value={eraFacts.filingStatus}
+                  placeholder="Status"
+                  options={FILING_STATUS_SELECT_OPTIONS}
+                  className={TAX_FILING_STATUS_SELECT_CLASSNAME}
+                  onValueChange={(next) => {
+                    if (next === eraFacts.filingStatus) return;
+                    setFilingApplyTarget(next as FilingStatus);
+                  }}
+                />
+              </div>
+            )}
+          </EraPaneFactRow>
+          <div className="flex w-full min-w-0 max-w-full flex-col gap-2 bg-bg-primary py-[0.5em]">
+            <div className="flex w-full min-w-0 max-w-full items-center justify-between gap-4">
+              <div className="flex min-w-0 flex-1 items-center gap-1 text-left">
+                <p
+                  className="min-w-0 whitespace-nowrap text-body-1 text-text-primary"
+                  style={{ margin: 0 }}
+                >
+                  Taxes: Federal
+                </p>
+                <EraPaneHelpButton
+                  label="Show explanation for Taxes: Federal"
+                  description="Choose whether to use Velella's estimated federal tax expense for this era."
+                />
+              </div>
+              <div className="flex shrink-0 justify-end">
+                {usingFederalTaxEstimate ? (
+                  <p
+                    className="text-right text-body-1 text-text-primary"
+                    style={{ margin: 0 }}
+                  >
+                    {formatCurrency(ESTIMATED_FEDERAL_TAX_EXPENSE)}
+                  </p>
+                ) : (
+                  <EraPaneAmountInput
+                    label="Taxes: Federal"
+                    value={eraFacts.expenses.selectedFederalTaxAmount}
+                    onCommit={(value) =>
+                      onUpdateEraFacts((prev) => ({
+                        ...prev,
+                        expenses: expensesWithSyncedTaxTotal({
+                          ...prev.expenses,
+                          federalTaxSource: "manual",
+                          selectedFederalTaxAmount: value,
+                        }),
+                      }))
+                    }
+                  />
+                )}
+              </div>
+            </div>
+            <div className="flex w-full justify-start gap-2">
+              <UseEstimatedFederalTaxControl
+                checked={usingFederalTaxEstimate}
+                onChange={handleFederalTaxEstimateToggle}
+              />
+              <button
+                type="button"
+                aria-label="Year overrides for Taxes: Federal"
+                onClick={(event) => {
+                  event.preventDefault();
+                  setShowNoOverridesYetModal(true);
+                }}
+                className={[
+                  "inline-flex size-5 shrink-0 items-center justify-center rounded-full border-0 bg-transparent p-0 shadow-none appearance-none",
+                  "text-text-secondary transition-colors hover:bg-bg-primary-hover hover:text-text-primary",
+                  "focus:outline-none focus-visible:ring-2 focus-visible:ring-input focus-visible:ring-offset-2",
+                ].join(" ")}
+              >
+                <Link2 size={16} aria-hidden />
+              </button>
+            </div>
+          </div>
+          <EraPaneFactRow
+            label="Taxes: State & Local"
+            description="Estimated state and local tax liability for this era."
           >
             {renderOverrideAwareValue(
-              "taxes",
-              "Taxes",
-              eraFacts.expenses.taxes,
+              "state-local-tax-liability",
+              "Taxes: State & Local",
+              eraFacts.expenses.stateLocalTaxLiability,
               (value) =>
                 onUpdateEraFacts((prev) => ({
                   ...prev,
-                  expenses: {
+                  expenses: expensesWithSyncedTaxTotal({
                     ...prev.expenses,
-                    taxes: value,
-                  },
+                    stateLocalTaxLiability: value,
+                  }),
                 }))
             )}
           </EraPaneFactRow>
+          <EraPaneReadonlyRow
+            label="Total Tax"
+            value={eraFacts.expenses.taxes}
+            description="Federal plus state and local tax estimates."
+          />
           <EraPaneFactRow
             label="Other Major Expenses"
             description="Major one-off expenses."
@@ -484,7 +755,9 @@ export default function EraFactsForm({
           </EraPaneFactRow>
         </section>
 
-        <section className="mx-[4px] flex min-w-0 self-stretch flex-col gap-0 bg-bg-primary py-[24px]">
+        <EraCashflowSummarySection summary={cashflowSummary} />
+
+        <section className="mx-[4px] flex min-w-0 self-stretch flex-col gap-0 border-b border-border-secondary bg-bg-primary py-[24px]">
           <EraPaneSectionHeader
             title="Invest"
             total={investmentTotal}
@@ -508,19 +781,55 @@ export default function EraFactsForm({
                 description="Income minus expenses."
               />
               <EraPaneFactRow
-                label="Traditional Retirement"
-                description="Pre-tax retirement contributions."
+                label="Pre-Tax 401(k) / 403(b) Contributions"
+                description={PRE_TAX_401K_CONTRIBUTION_DESCRIPTION}
               >
                 {renderOverrideAwareValue(
-                  "traditional-retirement",
-                  "Traditional Retirement",
-                  eraFacts.investmentBreakdown.traditionalRetirement,
+                  "pre-tax-401k-contribution",
+                  "Pre-Tax 401(k) / 403(b) Contributions",
+                  eraFacts.investmentBreakdown.preTax401kContribution,
                   (value) =>
                     onUpdateEraFacts((prev) => ({
                       ...prev,
                       investmentBreakdown: {
                         ...prev.investmentBreakdown,
-                        traditionalRetirement: value,
+                        preTax401kContribution: value,
+                      },
+                    }))
+                )}
+              </EraPaneFactRow>
+              <EraPaneFactRow
+                label="Traditional IRA Contribution"
+                description={PRE_TAX_IRA_CONTRIBUTION_DESCRIPTION}
+              >
+                {renderOverrideAwareValue(
+                  "pre-tax-ira-contribution",
+                  "Traditional IRA Contribution",
+                  eraFacts.investmentBreakdown.preTaxIraContribution,
+                  (value) =>
+                    onUpdateEraFacts((prev) => ({
+                      ...prev,
+                      investmentBreakdown: {
+                        ...prev.investmentBreakdown,
+                        preTaxIraContribution: value,
+                      },
+                    }))
+                )}
+              </EraPaneFactRow>
+              <EraPaneFactRow
+                label="Health Savings Account (HSA) Contributions"
+                description={HSA_CONTRIBUTION_DESCRIPTION}
+              >
+                {renderOverrideAwareValue(
+                  "hsa-contribution",
+                  "Health Savings Account (HSA) Contributions",
+                  eraFacts.investmentBreakdown.hsaContribution,
+                  (value) =>
+                    onUpdateEraFacts((prev) => ({
+                      ...prev,
+                      investmentBreakdown: {
+                        ...prev.investmentBreakdown,
+                        hsaContribution: value,
                       },
                     }))
                 )}
@@ -583,8 +892,55 @@ export default function EraFactsForm({
             </Button>
           )}
         </section>
+
+        <section className="mx-[4px] flex min-w-0 self-stretch flex-col gap-0 bg-bg-primary py-[24px]">
+          <EraPaneSectionHeader
+            title="Misc."
+            total={eraFacts.misc.rothConversions}
+            description="Tax-relevant amounts that are not part of household income totals in this pane."
+          />
+          <EraPaneFactRow
+            label="Roth Conversions"
+            description={ROTH_CONVERSIONS_DESCRIPTION}
+          >
+            {renderOverrideAwareValue(
+              "roth-conversions",
+              "Roth Conversions",
+              eraFacts.misc.rothConversions,
+              (value) =>
+                onUpdateEraFacts((prev) => ({
+                  ...prev,
+                  misc: { ...prev.misc, rothConversions: value },
+                }))
+            )}
+          </EraPaneFactRow>
+        </section>
       </div>
 
+      <FilingStatusApplyModal
+        isOpen={filingApplyTarget !== null}
+        selectionLabel={
+          filingApplyTarget ? labelForFilingStatus(filingApplyTarget) : ""
+        }
+        onApplyToAll={() => {
+          if (!filingApplyTarget) return;
+          onBulkApplyFilingStatus?.(filingApplyTarget);
+          onUpdateEraFacts((prev) => ({
+            ...prev,
+            filingStatus: filingApplyTarget,
+          }));
+          setFilingApplyTarget(null);
+        }}
+        onApplyHereOnly={() => {
+          if (!filingApplyTarget) return;
+          onUpdateEraFacts((prev) => ({
+            ...prev,
+            filingStatus: filingApplyTarget,
+          }));
+          setFilingApplyTarget(null);
+        }}
+        onCancel={() => setFilingApplyTarget(null)}
+      />
       <EraInvestmentBreakdownModal
         isOpen={showRemoveBreakdownModal}
         onCancel={() => setShowRemoveBreakdownModal(false)}
@@ -593,13 +949,30 @@ export default function EraFactsForm({
             ...prev,
             modifyInvestmentDetails: false,
             investmentBreakdown: {
-              traditionalRetirement: 0,
+              preTax401kContribution: 0,
+              preTaxIraContribution: 0,
+              hsaContribution: 0,
               rothRetirement: 0,
               taxableInvestments: 0,
             },
           }));
           setShowRemoveBreakdownModal(false);
         }}
+      />
+      <UseFederalTaxEstimateModal
+        isOpen={showFederalTaxEstimateModal}
+        currentManualAmountLabel={formatCurrency(
+          eraFacts.expenses.selectedFederalTaxAmount
+        )}
+        onCancel={() => setShowFederalTaxEstimateModal(false)}
+        onConfirm={() => {
+          applyFederalTaxEstimate();
+          setShowFederalTaxEstimateModal(false);
+        }}
+      />
+      <NoOverridesYetModal
+        isOpen={showNoOverridesYetModal}
+        onClose={() => setShowNoOverridesYetModal(false)}
       />
       {selectedOverrideField !== null && selectedOverrideFieldKey !== null ? (
         <EraOverridesModal
@@ -617,6 +990,11 @@ export default function EraFactsForm({
             draftOverridesByField[selectedOverrideFieldKey] ?? {}
           }
           initialLinkedValue={selectedOverrideField.readEraValue(eraFacts)}
+          valueKind={
+            selectedOverrideFieldKey === "filing-status"
+              ? "filing-status"
+              : "currency"
+          }
           onSave={handleOverridesSave}
           onCancel={closeOverridesModal}
         />

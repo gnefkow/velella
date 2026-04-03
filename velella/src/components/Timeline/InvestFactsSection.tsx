@@ -5,6 +5,11 @@ import EditableAmountCell, {
 } from "./EditableAmountCell";
 import type { InvestmentBreakdown } from "../../types/investment";
 import { investmentBreakdownTotal } from "../../lib/invest";
+import {
+  HSA_CONTRIBUTION_DESCRIPTION,
+  PRE_TAX_401K_CONTRIBUTION_DESCRIPTION,
+  PRE_TAX_IRA_CONTRIBUTION_DESCRIPTION,
+} from "../../lib/investmentContributions";
 
 function formatCurrency(value: number): string {
   return new Intl.NumberFormat("en-US", {
@@ -16,6 +21,8 @@ function formatCurrency(value: number): string {
 
 export interface InvestFactsSectionProps {
   availableToInvest: number;
+  /** Portfolio contribution in automatic mode (cash-flow shortfall clamped to 0). */
+  effectiveInvest: number;
   investmentDifference: number;
   modifyInvestmentDetails: boolean;
   investmentBreakdown: InvestmentBreakdown;
@@ -34,6 +41,7 @@ export interface InvestFactsSectionProps {
 
 export default function InvestFactsSection({
   availableToInvest,
+  effectiveInvest,
   investmentDifference,
   modifyInvestmentDetails,
   investmentBreakdown,
@@ -57,7 +65,7 @@ export default function InvestFactsSection({
     investmentDifference < 0 ? "text-[var(--text-error)]" : "";
   const investmentTotal = modifyInvestmentDetails
     ? investmentBreakdownTotal({ investmentBreakdown })
-    : availableToInvest;
+    : effectiveInvest;
 
   return (
     <Stack gap="sm" className="min-w-0">
@@ -133,9 +141,84 @@ export default function InvestFactsSection({
                 </label>
               </div>
 
+              <Stack gap="xs" className="min-w-0">
+                <Text size="body2" hierarchy="primary" className="leading-tight">
+                  Pre-Tax 401(k) / 403(b) Contributions
+                </Text>
+                <Text size="body2" hierarchy="secondary" className="leading-tight">
+                  {PRE_TAX_401K_CONTRIBUTION_DESCRIPTION}
+                </Text>
+                {canEditInvestAmount ? (
+                  <EditableAmountCell
+                    value={investmentBreakdown.preTax401kContribution}
+                    onCommit={(value) =>
+                      onCommitBreakdown("preTax401kContribution", value)
+                    }
+                    cellKey="preTax401kContribution"
+                    registerCell={registerCell}
+                  />
+                ) : (
+                  <div className="rounded border border-border-secondary bg-bg-secondary px-3 py-2">
+                    <Text size="body1" hierarchy="primary">
+                      {formatCurrency(
+                        investmentBreakdown.preTax401kContribution
+                      )}
+                    </Text>
+                  </div>
+                )}
+              </Stack>
+              <Stack gap="xs" className="min-w-0">
+                <Text size="body2" hierarchy="primary" className="leading-tight">
+                  Traditional IRA Contribution
+                </Text>
+                <Text size="body2" hierarchy="secondary" className="leading-tight">
+                  {PRE_TAX_IRA_CONTRIBUTION_DESCRIPTION}
+                </Text>
+                {canEditInvestAmount ? (
+                  <EditableAmountCell
+                    value={investmentBreakdown.preTaxIraContribution}
+                    onCommit={(value) =>
+                      onCommitBreakdown("preTaxIraContribution", value)
+                    }
+                    cellKey="preTaxIraContribution"
+                    registerCell={registerCell}
+                  />
+                ) : (
+                  <div className="rounded border border-border-secondary bg-bg-secondary px-3 py-2">
+                    <Text size="body1" hierarchy="primary">
+                      {formatCurrency(
+                        investmentBreakdown.preTaxIraContribution
+                      )}
+                    </Text>
+                  </div>
+                )}
+              </Stack>
+              <Stack gap="xs" className="min-w-0">
+                <Text size="body2" hierarchy="primary" className="leading-tight">
+                  Health Savings Account (HSA) Contributions
+                </Text>
+                <Text size="body2" hierarchy="secondary" className="leading-tight">
+                  {HSA_CONTRIBUTION_DESCRIPTION}
+                </Text>
+                {canEditInvestAmount ? (
+                  <EditableAmountCell
+                    value={investmentBreakdown.hsaContribution}
+                    onCommit={(value) =>
+                      onCommitBreakdown("hsaContribution", value)
+                    }
+                    cellKey="hsaContribution"
+                    registerCell={registerCell}
+                  />
+                ) : (
+                  <div className="rounded border border-border-secondary bg-bg-secondary px-3 py-2">
+                    <Text size="body1" hierarchy="primary">
+                      {formatCurrency(investmentBreakdown.hsaContribution)}
+                    </Text>
+                  </div>
+                )}
+              </Stack>
               {(
                 [
-                  ["Traditional Retirement", "traditionalRetirement"],
                   ["Roth Retirement", "rothRetirement"],
                   ["Taxable Investments", "taxableInvestments"],
                 ] as const

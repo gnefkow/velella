@@ -1,15 +1,32 @@
-import { useCallback, useMemo, useRef } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import { Stack, Text } from "../../../../../counterfoil-kit/src/index.ts";
-import { calculateYearFacts } from "../../lib/yearFacts";
+import {
+  calculateYearFacts,
+  ESTIMATED_FEDERAL_TAX_EXPENSE,
+  expensesWithSyncedTaxTotal,
+} from "../../lib/yearFacts";
 import {
   availableToInvestFromYearInput,
+  effectiveInvestFromYearInput,
   investmentDifferenceFromYearInput,
 } from "../../lib/invest";
 import { isFieldOverridden } from "../../lib/eraHelpers";
-import type { Scenario, YearInput } from "../../types/scenario";
+import type { FilingStatus, Scenario, YearInput } from "../../types/scenario";
+import FilingStatusApplyModal from "../General/FilingStatusApplyModal";
+import NoOverridesYetModal from "../General/NoOverridesYetModal";
+import UseFederalTaxEstimateModal from "../General/UseFederalTaxEstimateModal";
+import { labelForFilingStatus } from "../../lib/filingStatus";
 import type { YearFactsFieldKey } from "../../types/era";
 import type { FocusAndEditHandle } from "./EditableAmountCell";
+import YearFactsFederalTaxField from "./YearFactsFederalTaxField";
 import YearFactsField from "./YearFactsField";
+import YearFactsFilingStatusField from "./YearFactsFilingStatusField";
+import YearFactsPreTaxDistributionField from "./YearFactsPreTaxDistributionField";
+import YearFactsRothDistributionsField from "./YearFactsRothDistributionsField";
+import YearFactsRothConversionsField from "./YearFactsRothConversionsField";
+import YearFactsSocialSecurityFields from "./YearFactsSocialSecurityFields";
+import { memberIsSocialSecurityEligibleAge } from "../../lib/socialSecurityEligibility";
+import { memberIsPreTaxDistributionEligibleAge } from "../../lib/preTaxDistributionEligibility";
 import InvestFactsSection from "./InvestFactsSection";
 
 interface YearFactsPaneProps {
@@ -23,6 +40,7 @@ interface YearFactsPaneProps {
   onRelinkField?: (year: number, fieldKey: string) => void;
   onOverrideInvestBlock?: (year: number) => void;
   onRelinkInvestBlock?: (year: number) => void;
+  onBulkApplyFilingStatus?: (status: FilingStatus) => void;
 }
 
 export default function YearFactsPane({
@@ -33,8 +51,16 @@ export default function YearFactsPane({
   onRelinkField,
   onOverrideInvestBlock,
   onRelinkInvestBlock,
+  onBulkApplyFilingStatus,
 }: YearFactsPaneProps) {
   const cellRefs = useRef<Map<string, FocusAndEditHandle>>(new Map());
+  const [filingApplyTarget, setFilingApplyTarget] = useState<FilingStatus | null>(
+    null
+  );
+  const [showFederalTaxEstimateModal, setShowFederalTaxEstimateModal] =
+    useState(false);
+  const [showNoTaxOverridesYetModal, setShowNoTaxOverridesYetModal] =
+    useState(false);
 
   const incomeEarners = useMemo(
     () => scenario.householdMembers.filter((member) => member.incomeEarner),
@@ -46,7 +72,9 @@ export default function YearFactsPane({
     selectedYearInput &&
       isYearInEra &&
       (isFieldOverridden(selectedYearInput, "modify-investment-details") ||
-        isFieldOverridden(selectedYearInput, "traditional-retirement") ||
+        isFieldOverridden(selectedYearInput, "pre-tax-401k-contribution") ||
+        isFieldOverridden(selectedYearInput, "pre-tax-ira-contribution") ||
+        isFieldOverridden(selectedYearInput, "hsa-contribution") ||
         isFieldOverridden(selectedYearInput, "roth-retirement") ||
         isFieldOverridden(selectedYearInput, "taxable-investments"))
   );
@@ -59,19 +87,48 @@ export default function YearFactsPane({
     [selectedYearInput, isYearInEra]
   );
 
-  const editableFieldKeys = useMemo(
-    () => [
-      ...incomeEarners.map((member) => `wage-income-${member.id}`),
-      "dividend-income",
+  const editableFieldKeys = useMemo(() => {
+    const wageKeys = incomeEarners.map((member) => `wage-income-${member.id}`);
+    const ssKeys =
+      selectedYearInput == null
+        ? []
+        : incomeEarners
+            .filter((m) =>
+              memberIsSocialSecurityEligibleAge(
+                m.birthday,
+                selectedYearInput.year
+              )
+            )
+            .map((m) => `social-security-benefits-${m.id}`);
+    const prominentPreTaxDistribution =
+      selectedYearInput != null &&
+      incomeEarners.some((m) =>
+        memberIsPreTaxDistributionEligibleAge(m.birthday, selectedYearInput.year)
+      );
+    const preTaxKey = ["pre-tax-distributions"];
+    const rothKey = ["roth-distributions"];
+    const advancedIncomeKeys = [
+      "qualified-dividends",
+      "ordinary-dividends",
       "interest-income",
       "short-term-capital-gains",
       "long-term-capital-gains",
+    ];
+    return [
+      ...wageKeys,
+      ...ssKeys,
+      ...(prominentPreTaxDistribution ? [...preTaxKey, ...rothKey] : []),
+      ...advancedIncomeKeys,
+      ...(prominentPreTaxDistribution ? [] : [...preTaxKey, ...rothKey]),
       "household-expenses",
-      "taxes",
+      ...(selectedYearInput?.expenses.federalTaxSource === "manual"
+        ? ["selected-federal-tax-amount"]
+        : []),
+      "state-local-tax-liability",
       "other-expenses",
-    ],
-    [incomeEarners]
-  );
+      "roth-conversions",
+    ];
+  }, [incomeEarners, selectedYearInput?.expenses.federalTaxSource, selectedYearInput?.year]);
 
   const registerCell = useCallback(
     (key: string, handle: FocusAndEditHandle | null) => {
@@ -122,7 +179,9 @@ export default function YearFactsPane({
             ...yi,
             modifyInvestmentDetails: false,
             investmentBreakdown: {
-              traditionalRetirement: 0,
+              preTax401kContribution: 0,
+              preTaxIraContribution: 0,
+              hsaContribution: 0,
               rothRetirement: 0,
               taxableInvestments: 0,
             },
@@ -158,15 +217,63 @@ export default function YearFactsPane({
 
   const { ordinaryIncome, totalIncome, totalExpenses } =
     calculateYearFacts(selectedYearInput);
+  const showProminentPreTaxDistribution = incomeEarners.some((member) =>
+    memberIsPreTaxDistributionEligibleAge(member.birthday, selectedYearInput.year)
+  );
 
   const availableToInvest = availableToInvestFromYearInput(selectedYearInput);
+  const effectiveInvest = effectiveInvestFromYearInput(selectedYearInput);
   const investmentDifference =
     investmentDifferenceFromYearInput(selectedYearInput);
+  const usingFederalTaxEstimate =
+    selectedYearInput.expenses.federalTaxSource === "use-estimate";
+  const federalTaxFieldState = getEraState("selected-federal-tax-amount");
+
+  const applyFederalTaxEstimate = () => {
+    updateYearInput((yearInput) => ({
+      ...yearInput,
+      expenses: expensesWithSyncedTaxTotal({
+        ...yearInput.expenses,
+        federalTaxSource: "use-estimate",
+        selectedFederalTaxAmount: 0,
+      }),
+    }));
+  };
+
+  const applyManualFederalTax = () => {
+    updateYearInput((yearInput) => ({
+      ...yearInput,
+      expenses: expensesWithSyncedTaxTotal({
+        ...yearInput.expenses,
+        federalTaxSource: "manual",
+        selectedFederalTaxAmount: ESTIMATED_FEDERAL_TAX_EXPENSE,
+      }),
+    }));
+  };
+
+  const handleFederalTaxEstimateToggle = (nextChecked: boolean) => {
+    if (federalTaxFieldState.eraLocked) {
+      setShowNoTaxOverridesYetModal(true);
+      return;
+    }
+
+    if (nextChecked) {
+      if (selectedYearInput.expenses.selectedFederalTaxAmount !== 0) {
+        setShowFederalTaxEstimateModal(true);
+        return;
+      }
+      applyFederalTaxEstimate();
+      return;
+    }
+
+    applyManualFederalTax();
+  };
 
   return (
-    <aside className="flex h-full min-h-0 w-[22em] shrink-0 flex-col border-l border-border-secondary bg-bg-primary overflow-hidden">
-      <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-[1em]">
-        <Stack gap="lg">
+    <>
+      <aside className="flex h-full min-h-0 w-[22em] shrink-0 flex-col border-l border-border-secondary bg-bg-primary overflow-hidden">
+        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-[1em]">
+          <Stack gap="lg">
           <Stack gap="xs">
             <Text size="h3" hierarchy="primary">
               Year Facts
@@ -207,26 +314,92 @@ export default function YearFactsPane({
               );
             })}
 
+            <YearFactsSocialSecurityFields
+              calendarYear={selectedYearInput.year}
+              incomeEarners={incomeEarners}
+              yearInput={selectedYearInput}
+              registerCell={registerCell}
+              getEraState={getEraState}
+              focusNextField={focusNextField}
+              onUpdateYearInput={updateYearInput}
+              onOverrideField={onOverrideField}
+              onRelinkField={onRelinkField}
+            />
+
+            {showProminentPreTaxDistribution ? (
+              <YearFactsPreTaxDistributionField
+                yearInput={selectedYearInput}
+                registerCell={registerCell}
+                getEraState={getEraState}
+                focusNextField={focusNextField}
+                onUpdateYearInput={updateYearInput}
+                onOverrideField={onOverrideField}
+                onRelinkField={onRelinkField}
+              />
+            ) : null}
+
+            {showProminentPreTaxDistribution ? (
+              <YearFactsRothDistributionsField
+                yearInput={selectedYearInput}
+                registerCell={registerCell}
+                getEraState={getEraState}
+                focusNextField={focusNextField}
+                onUpdateYearInput={updateYearInput}
+                onOverrideField={onOverrideField}
+                onRelinkField={onRelinkField}
+              />
+            ) : null}
+
             <YearFactsField
-              title="Dividend Income"
-              description="Income from dividends."
-              value={selectedYearInput.otherIncome.dividendIncome}
+              title="Qualified Dividends"
+              description="Dividend income eligible for preferential tax treatment."
+              value={selectedYearInput.otherIncome.qualifiedDividends}
               onCommit={(value) =>
                 updateYearInput((yearInput) => ({
                   ...yearInput,
                   otherIncome: {
                     ...yearInput.otherIncome,
-                    dividendIncome: value,
+                    qualifiedDividends: value,
                   },
                 }))
               }
-              cellKey="dividend-income"
+              cellKey="qualified-dividends"
               registerCell={registerCell}
-              onFocusNext={() => focusNextField("dividend-income")}
-              eraLocked={getEraState("dividend-income").eraLocked}
-              eraOverride={getEraState("dividend-income").eraOverride}
-              onOverride={() => onOverrideField?.(selectedYearInput.year, "dividend-income")}
-              onRelink={() => onRelinkField?.(selectedYearInput.year, "dividend-income")}
+              onFocusNext={() => focusNextField("qualified-dividends")}
+              eraLocked={getEraState("qualified-dividends").eraLocked}
+              eraOverride={getEraState("qualified-dividends").eraOverride}
+              onOverride={() =>
+                onOverrideField?.(selectedYearInput.year, "qualified-dividends")
+              }
+              onRelink={() =>
+                onRelinkField?.(selectedYearInput.year, "qualified-dividends")
+              }
+            />
+
+            <YearFactsField
+              title="Ordinary Dividends"
+              description="Dividend income taxed at ordinary income rates."
+              value={selectedYearInput.otherIncome.ordinaryDividends}
+              onCommit={(value) =>
+                updateYearInput((yearInput) => ({
+                  ...yearInput,
+                  otherIncome: {
+                    ...yearInput.otherIncome,
+                    ordinaryDividends: value,
+                  },
+                }))
+              }
+              cellKey="ordinary-dividends"
+              registerCell={registerCell}
+              onFocusNext={() => focusNextField("ordinary-dividends")}
+              eraLocked={getEraState("ordinary-dividends").eraLocked}
+              eraOverride={getEraState("ordinary-dividends").eraOverride}
+              onOverride={() =>
+                onOverrideField?.(selectedYearInput.year, "ordinary-dividends")
+              }
+              onRelink={() =>
+                onRelinkField?.(selectedYearInput.year, "ordinary-dividends")
+              }
             />
 
             <YearFactsField
@@ -252,7 +425,7 @@ export default function YearFactsPane({
             />
 
             <YearFactsField
-              title="Capital Gains (Short Term)"
+              title="Realized Taxable Gains (Short Term)"
               description="Capital gains income for assets sold that have been held for less than one year."
               value={selectedYearInput.otherIncome.shortTermCapitalGains}
               onCommit={(value) =>
@@ -275,12 +448,12 @@ export default function YearFactsPane({
 
             <YearFactsField
               title="Ordinary Income"
-              description="Income from wages, dividends, interest, and short-term capital gains."
+              description="Tax-relevant ordinary items: wages, Social Security benefits, pre-tax distributions, dividends, interest, and short-term capital gains. Roth distributions are excluded (non-taxable in V1)."
               value={ordinaryIncome}
             />
 
             <YearFactsField
-              title="Capital Gains (Long Term)"
+              title="Realized Taxable Gains (Long Term)"
               description="Capital gains income for assets sold that have been held for more than one year."
               value={selectedYearInput.otherIncome.longTermCapitalGains}
               onCommit={(value) =>
@@ -301,9 +474,33 @@ export default function YearFactsPane({
               onRelink={() => onRelinkField?.(selectedYearInput.year, "long-term-capital-gains")}
             />
 
+            {!showProminentPreTaxDistribution ? (
+              <YearFactsPreTaxDistributionField
+                yearInput={selectedYearInput}
+                registerCell={registerCell}
+                getEraState={getEraState}
+                focusNextField={focusNextField}
+                onUpdateYearInput={updateYearInput}
+                onOverrideField={onOverrideField}
+                onRelinkField={onRelinkField}
+              />
+            ) : null}
+
+            {!showProminentPreTaxDistribution ? (
+              <YearFactsRothDistributionsField
+                yearInput={selectedYearInput}
+                registerCell={registerCell}
+                getEraState={getEraState}
+                focusNextField={focusNextField}
+                onUpdateYearInput={updateYearInput}
+                onOverrideField={onOverrideField}
+                onRelinkField={onRelinkField}
+              />
+            ) : null}
+
             <YearFactsField
               title="Total Income"
-              description="Ordinary income plus long-term capital gains."
+              description="Ordinary income (including wages and Social Security) plus long-term capital gains plus Roth distributions (household cash inflow)."
               value={totalIncome}
             />
 
@@ -329,26 +526,97 @@ export default function YearFactsPane({
               onRelink={() => onRelinkField?.(selectedYearInput.year, "household-expenses")}
             />
 
-            <YearFactsField
-              title="Taxes"
-              description="Estimated tax expenses for this year."
-              value={selectedYearInput.expenses.taxes}
+            <YearFactsFilingStatusField
+              title="Tax filing status"
+              description="Federal income tax filing status used for tax estimates."
+              value={selectedYearInput.filingStatus}
+              eraLocked={getEraState("filing-status").eraLocked}
+              eraOverride={getEraState("filing-status").eraOverride}
+              onOverride={() =>
+                onOverrideField?.(selectedYearInput.year, "filing-status")
+              }
+              onRelink={() =>
+                onRelinkField?.(selectedYearInput.year, "filing-status")
+              }
+              onRequestChange={(next) => setFilingApplyTarget(next)}
+            />
+
+            <YearFactsFederalTaxField
+              title="Taxes: Federal"
+              description="Manual federal income tax liability for this year."
+              value={
+                usingFederalTaxEstimate
+                  ? ESTIMATED_FEDERAL_TAX_EXPENSE
+                  : selectedYearInput.expenses.selectedFederalTaxAmount
+              }
+              useEstimate={usingFederalTaxEstimate}
+              onToggleEstimate={handleFederalTaxEstimateToggle}
               onCommit={(value) =>
                 updateYearInput((yearInput) => ({
                   ...yearInput,
-                  expenses: {
+                  expenses: expensesWithSyncedTaxTotal({
                     ...yearInput.expenses,
-                    taxes: value,
-                  },
+                    federalTaxSource: "manual",
+                    selectedFederalTaxAmount: value,
+                  }),
                 }))
               }
-              cellKey="taxes"
+              cellKey="selected-federal-tax-amount"
               registerCell={registerCell}
-              onFocusNext={() => focusNextField("taxes")}
-              eraLocked={getEraState("taxes").eraLocked}
-              eraOverride={getEraState("taxes").eraOverride}
-              onOverride={() => onOverrideField?.(selectedYearInput.year, "taxes")}
-              onRelink={() => onRelinkField?.(selectedYearInput.year, "taxes")}
+              onFocusNext={() => focusNextField("selected-federal-tax-amount")}
+              eraLocked={federalTaxFieldState.eraLocked}
+              eraOverride={federalTaxFieldState.eraOverride}
+              onOverride={() => setShowNoTaxOverridesYetModal(true)}
+              onRelink={() =>
+                onRelinkField?.(
+                  selectedYearInput.year,
+                  "selected-federal-tax-amount"
+                )
+              }
+            />
+
+            <YearFactsField
+              title="Taxes: State & Local"
+              description="Estimated state and local tax liability for this year."
+              value={selectedYearInput.expenses.stateLocalTaxLiability}
+              onCommit={(value) =>
+                updateYearInput((yearInput) => ({
+                  ...yearInput,
+                  expenses: expensesWithSyncedTaxTotal({
+                    ...yearInput.expenses,
+                    stateLocalTaxLiability: value,
+                  }),
+                }))
+              }
+              cellKey="state-local-tax-liability"
+              registerCell={registerCell}
+              onFocusNext={() =>
+                focusNextField("state-local-tax-liability")
+              }
+              eraLocked={
+                getEraState("state-local-tax-liability").eraLocked
+              }
+              eraOverride={
+                getEraState("state-local-tax-liability").eraOverride
+              }
+              onOverride={() =>
+                onOverrideField?.(
+                  selectedYearInput.year,
+                  "state-local-tax-liability"
+                )
+              }
+              onRelink={() =>
+                onRelinkField?.(
+                  selectedYearInput.year,
+                  "state-local-tax-liability"
+                )
+              }
+            />
+
+            <YearFactsField
+              title="Total Tax"
+              description="Federal plus state and local tax estimates."
+              value={selectedYearInput.expenses.taxes}
             />
 
             <YearFactsField
@@ -375,12 +643,36 @@ export default function YearFactsPane({
 
             <YearFactsField
               title="Expenses"
-              description="Household expenses, taxes, and other major expenses."
+              description="Household expenses, total tax, and other major expenses."
               value={totalExpenses}
+            />
+
+            <FilingStatusApplyModal
+              isOpen={filingApplyTarget !== null}
+              selectionLabel={
+                filingApplyTarget
+                  ? labelForFilingStatus(filingApplyTarget)
+                  : ""
+              }
+              onApplyToAll={() => {
+                if (!filingApplyTarget) return;
+                onBulkApplyFilingStatus?.(filingApplyTarget);
+                setFilingApplyTarget(null);
+              }}
+              onApplyHereOnly={() => {
+                if (!filingApplyTarget) return;
+                updateYearInput((yearInput) => ({
+                  ...yearInput,
+                  filingStatus: filingApplyTarget,
+                }));
+                setFilingApplyTarget(null);
+              }}
+              onCancel={() => setFilingApplyTarget(null)}
             />
 
             <InvestFactsSection
               availableToInvest={availableToInvest}
+              effectiveInvest={effectiveInvest}
               investmentDifference={investmentDifference}
               modifyInvestmentDetails={
                 selectedYearInput.modifyInvestmentDetails
@@ -410,9 +702,45 @@ export default function YearFactsPane({
                   : undefined
               }
             />
+
+            <Stack gap="xs" className="min-w-0 pt-2">
+              <Text size="h3" hierarchy="primary">
+                Misc.
+              </Text>
+              <Text size="body2" hierarchy="secondary">
+                Tax-relevant items that are not part of income totals above.
+              </Text>
+              <YearFactsRothConversionsField
+                yearInput={selectedYearInput}
+                registerCell={registerCell}
+                getEraState={getEraState}
+                focusNextField={focusNextField}
+                onUpdateYearInput={updateYearInput}
+                onOverrideField={onOverrideField}
+                onRelinkField={onRelinkField}
+              />
+            </Stack>
           </Stack>
-        </Stack>
-      </div>
-    </aside>
+          </Stack>
+        </div>
+      </aside>
+      <UseFederalTaxEstimateModal
+        isOpen={showFederalTaxEstimateModal}
+        currentManualAmountLabel={new Intl.NumberFormat("en-US", {
+          style: "currency",
+          currency: "USD",
+          maximumFractionDigits: 0,
+        }).format(selectedYearInput.expenses.selectedFederalTaxAmount)}
+        onCancel={() => setShowFederalTaxEstimateModal(false)}
+        onConfirm={() => {
+          applyFederalTaxEstimate();
+          setShowFederalTaxEstimateModal(false);
+        }}
+      />
+      <NoOverridesYetModal
+        isOpen={showNoTaxOverridesYetModal}
+        onClose={() => setShowNoTaxOverridesYetModal(false)}
+      />
+    </>
   );
 }
