@@ -16,6 +16,7 @@ import {
 import type { Year } from "../../types/year";
 import type { Scenario, YearInput } from "../../types/scenario";
 import { ageInYear } from "../../lib/age";
+import { sortHouseholdMembersIncomeEarnersFirst } from "../../lib/sortHouseholdMembers";
 import { buildDefaultYearInput } from "../../lib/yearFacts";
 import { buildTimelineGroups, getGroupForYear } from "../../lib/timelineGroups";
 import type { Era } from "../../types/era";
@@ -122,11 +123,7 @@ export default function TimelineTable({
   const cellRefs = useRef<Map<string, FocusAndEditHandle>>(new Map());
 
   const incomeEarnerFirst = useMemo(
-    () =>
-      [...scenario.householdMembers].sort((a, b) => {
-        if (a.incomeEarner === b.incomeEarner) return 0;
-        return a.incomeEarner ? -1 : 1;
-      }),
+    () => sortHouseholdMembersIncomeEarnersFirst(scenario.householdMembers),
     [scenario.householdMembers]
   );
 

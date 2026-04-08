@@ -6,7 +6,10 @@ import type { FilingStatus, Scenario } from "../../types/scenario";
 import EraDetailPane, { type EraDetailPaneHandle } from "../General/EraDetailPane";
 import { useTaxReferenceData } from "../../hooks/useTaxReferenceData";
 import { toTaxEstimatorReferenceData } from "../../services/taxReferenceDataService";
+import { buildDefaultEraFacts } from "../../lib/eraFacts";
+import { findFirstEmptyYearForEras } from "../../lib/eraHelpers";
 import EraUnsavedChangesModal from "../General/EraUnsavedChangesModal";
+import { createEra, updateEra } from "../../services/eraService";
 import ErasList from "./ErasList";
 
 type NarrativePendingAfterUnsavedModal =
@@ -26,7 +29,6 @@ export default function NarrativePage({
   onPersist,
 }: NarrativePageProps) {
   const [selectedEra, setSelectedEra] = useState<Era | null>(null);
-  const [isCreating, setIsCreating] = useState(false);
   const [localScenario, setLocalScenario] = useState<Scenario | null>(scenario);
   const [showUnsavedModal, setShowUnsavedModal] = useState(false);
   const [pendingAfterUnsavedModal, setPendingAfterUnsavedModal] =
@@ -75,9 +77,87 @@ export default function NarrativePage({
     [onPersist, selectedEra]
   );
 
+  const performInlineCreateEra = useCallback(() => {
+    setLocalScenario((current) => {
+      if (!current) return current;
+      const emptyYear = findFirstEmptyYearForEras(
+        current.scenarioInfo.yearStart,
+        current.scenarioInfo.yearEnd,
+        current.eras ?? []
+      );
+      if (emptyYear === null) return current;
+      const incomeEarnerIds = current.householdMembers
+        .filter((m) => m.incomeEarner)
+        .map((m) => m.id);
+      const eraFacts = buildDefaultEraFacts(incomeEarnerIds);
+      try {
+        const updated = createEra(current, {
+          nickname: "New Era",
+          description: "",
+          startYear: emptyYear,
+          endYear: emptyYear,
+          eraFacts,
+        });
+        void onPersist(updated);
+        return updated;
+      } catch {
+        return current;
+      }
+    });
+  }, [onPersist]);
+
+  const handleEraYearRangeChange = useCallback(
+    (eraId: string, startYear: number, endYear: number) => {
+      setLocalScenario((current) => {
+        if (!current) return current;
+        const era = current.eras?.find((e) => e.id === eraId);
+        if (!era) return current;
+        if (startYear > endYear) return current;
+        try {
+          const updated = updateEra(current, eraId, {
+            nickname: era.nickname,
+            description: era.description,
+            startYear,
+            endYear,
+            eraFacts: era.eraFacts,
+          });
+          void onPersist(updated);
+          return updated;
+        } catch {
+          return current;
+        }
+      });
+    },
+    [onPersist]
+  );
+
+  const handleEraNicknameChange = useCallback(
+    (eraId: string, nickname: string) => {
+      setLocalScenario((current) => {
+        if (!current) return current;
+        const era = current.eras?.find((e) => e.id === eraId);
+        if (!era) return current;
+        if (era.nickname === nickname) return current;
+        try {
+          const updated = updateEra(current, eraId, {
+            nickname,
+            description: era.description,
+            startYear: era.startYear,
+            endYear: era.endYear,
+            eraFacts: era.eraFacts,
+          });
+          void onPersist(updated);
+          return updated;
+        } catch {
+          return current;
+        }
+      });
+    },
+    [onPersist]
+  );
+
   const closePane = useCallback(() => {
     setSelectedEra(null);
-    setIsCreating(false);
   }, []);
 
   const requestClosePane = useCallback(() => {
@@ -91,31 +171,29 @@ export default function NarrativePage({
 
   const requestSelectEra = useCallback(
     (era: Era) => {
-      if (selectedEra?.id === era.id && !isCreating) {
+      if (selectedEra?.id === era.id) {
         return;
       }
-      const paneOpen = selectedEra !== null || isCreating;
+      const paneOpen = selectedEra !== null;
       if (paneOpen && eraPaneRef.current?.hasUnsavedChanges()) {
         setPendingAfterUnsavedModal({ type: "selectEra", era });
         setShowUnsavedModal(true);
         return;
       }
       setSelectedEra(era);
-      setIsCreating(false);
     },
-    [isCreating, selectedEra]
+    [selectedEra]
   );
 
   const requestCreateEra = useCallback(() => {
-    const paneOpen = selectedEra !== null || isCreating;
+    const paneOpen = selectedEra !== null;
     if (paneOpen && eraPaneRef.current?.hasUnsavedChanges()) {
       setPendingAfterUnsavedModal({ type: "create" });
       setShowUnsavedModal(true);
       return;
     }
-    setSelectedEra(null);
-    setIsCreating(true);
-  }, [isCreating, selectedEra]);
+    performInlineCreateEra();
+  }, [performInlineCreateEra, selectedEra]);
 
   const handleUnsavedModalSave = useCallback(() => {
     const didSave = eraPaneRef.current?.saveDraft() ?? false;
@@ -132,12 +210,11 @@ export default function NarrativePage({
       closePane();
     } else if (pending.type === "selectEra") {
       setSelectedEra(pending.era);
-      setIsCreating(false);
     } else {
-      setSelectedEra(null);
-      setIsCreating(true);
+      closePane();
+      performInlineCreateEra();
     }
-  }, [closePane, pendingAfterUnsavedModal]);
+  }, [closePane, pendingAfterUnsavedModal, performInlineCreateEra]);
 
   const handleUnsavedModalDiscard = useCallback(() => {
     setShowUnsavedModal(false);
@@ -150,14 +227,22 @@ export default function NarrativePage({
       closePane();
     } else if (pending.type === "selectEra") {
       setSelectedEra(pending.era);
-      setIsCreating(false);
     } else {
-      setSelectedEra(null);
-      setIsCreating(true);
+      closePane();
+      performInlineCreateEra();
     }
-  }, [closePane, pendingAfterUnsavedModal]);
+  }, [closePane, pendingAfterUnsavedModal, performInlineCreateEra]);
 
-  const isPaneOpen = selectedEra !== null || isCreating;
+  const canCreateEra = useMemo(() => {
+    if (!localScenario) return false;
+    return (
+      findFirstEmptyYearForEras(
+        localScenario.scenarioInfo.yearStart,
+        localScenario.scenarioInfo.yearEnd,
+        localScenario.eras ?? []
+      ) !== null
+    );
+  }, [localScenario]);
 
   if (loading) {
     return (
@@ -182,15 +267,21 @@ export default function NarrativePage({
           </Text>
           <ErasList
             eras={eras}
+            yearStart={localScenario.scenarioInfo.yearStart}
+            yearEnd={localScenario.scenarioInfo.yearEnd}
+            canCreateEra={canCreateEra}
             onCreateEra={requestCreateEra}
             onSelectEra={requestSelectEra}
+            onEraYearRangeChange={handleEraYearRangeChange}
+            onEraNicknameChange={handleEraNicknameChange}
+            householdMembers={localScenario.householdMembers}
           />
         </Stack>
       </div>
-      {isPaneOpen && (
+      {selectedEra && (
         <EraDetailPane
           ref={eraPaneRef}
-          key={selectedEra?.id ?? "new-era"}
+          key={selectedEra.id}
           scenario={localScenario}
           era={selectedEra}
           taxEstimatorRef={taxEstimatorRef}

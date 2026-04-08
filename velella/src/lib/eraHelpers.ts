@@ -1,6 +1,7 @@
+import type { TertiaryNativeSelectOption } from "../components/ui/TertiaryNativeSelect";
 import type { Era } from "../types/era";
-import type { YearInput } from "../types/scenario";
 import type { YearFactsFieldKey } from "../types/era";
+import type { YearInput } from "../types/scenario";
 
 /** Returns years in the range [startYear, endYear] inclusive. */
 export function yearsInRange(startYear: number, endYear: number): number[] {
@@ -37,6 +38,20 @@ export function doesRangeOverlapOtherEra(
 /** Returns the era that occupies the given year, or undefined. */
 export function getEraForYear(eras: Era[], year: number): Era | undefined {
   return eras.find((e) => year >= e.startYear && year <= e.endYear);
+}
+
+/** First calendar year in [yearStart, yearEnd] not covered by any era, or null if the range is full. */
+export function findFirstEmptyYearForEras(
+  yearStart: number,
+  yearEnd: number,
+  eras: Era[]
+): number | null {
+  for (let y = yearStart; y <= yearEnd; y++) {
+    if (!getEraForYear(eras, y)) {
+      return y;
+    }
+  }
+  return null;
 }
 
 export interface YearDropdownOption {
@@ -78,6 +93,18 @@ export function getYearDropdownOptions(
     options.push({ year: y, disabled, disabledReason });
   }
   return options;
+}
+
+/** Maps year dropdown options to `TertiaryNativeSelect` options (Era pane header, Narrative list). */
+export function yearDropdownOptionsToTertiarySelectOptions(
+  options: YearDropdownOption[]
+): TertiaryNativeSelectOption[] {
+  return options.map((option) => ({
+    value: String(option.year),
+    label: String(option.year),
+    disabled: option.disabled,
+    title: option.disabledReason,
+  }));
 }
 
 /** Returns true if the year has era metadata linking it to an era. */

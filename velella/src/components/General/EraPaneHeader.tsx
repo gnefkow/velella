@@ -1,10 +1,11 @@
 import { ChevronsRight, MoreHorizontal, Pencil } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { Button } from "../../../../../counterfoil-kit/src/index.ts";
-import type { YearDropdownOption } from "../../lib/eraHelpers";
-import TertiaryNativeSelect, {
-  type TertiaryNativeSelectOption,
-} from "../ui/TertiaryNativeSelect";
+import {
+  type YearDropdownOption,
+  yearDropdownOptionsToTertiarySelectOptions,
+} from "../../lib/eraHelpers";
+import TertiaryNativeSelect from "../ui/TertiaryNativeSelect";
 
 interface EraPaneHeaderProps {
   nickname: string;
@@ -19,17 +20,6 @@ interface EraPaneHeaderProps {
   onDescriptionChange: (value: string) => void;
   onClose: () => void;
   onDelete?: () => void;
-}
-
-function mapYearOptionsToSelectOptions(
-  options: YearDropdownOption[]
-): TertiaryNativeSelectOption[] {
-  return options.map((option) => ({
-    value: String(option.year),
-    label: String(option.year),
-    disabled: option.disabled,
-    title: option.disabledReason,
-  }));
 }
 
 export default function EraPaneHeader({
@@ -114,7 +104,7 @@ export default function EraPaneHeader({
             ariaLabel="Start year"
             placeholder="Start"
             value={startYear != null ? String(startYear) : null}
-            options={mapYearOptionsToSelectOptions(startOptions)}
+            options={yearDropdownOptionsToTertiarySelectOptions(startOptions)}
             onValueChange={(v) => onStartChange(Number(v))}
             labelClassName="tabular-nums !pl-[2px]"
           />
@@ -123,7 +113,7 @@ export default function EraPaneHeader({
             ariaLabel="End year"
             placeholder="End"
             value={endYear != null ? String(endYear) : null}
-            options={mapYearOptionsToSelectOptions(endOptions)}
+            options={yearDropdownOptionsToTertiarySelectOptions(endOptions)}
             onValueChange={(v) => onEndChange(Number(v))}
             labelClassName="tabular-nums"
           />
