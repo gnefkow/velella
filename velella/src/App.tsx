@@ -1,10 +1,17 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import GlobalNav, { type TabId } from "./components/Global_Nav/GlobalNav";
 import NarrativePage from "./components/Narrative/NarrativePage";
 import TimelinePage from "./components/Timeline/TimelinePage";
-import AssumptionsPage from "./components/Assumptions/AssumptionsPage";
+import AssumptionsPage, {
+  type AssumptionsPageHandle,
+} from "./components/Assumptions/AssumptionsPage";
+import ScenarioDetailsExitModal from "./components/Assumptions/ScenarioDetailsExitModal";
 import { useScenario } from "./hooks/useScenario";
 import { useScenarioSelection } from "./hooks/useScenarioSelection";
+
+type PendingAssumptionsNav =
+  | { type: "tab"; tab: TabId }
+  | { type: "scenario"; id: string };
 
 function AppContent() {
   const [activeTab, setActiveTab] = useState<TabId>("narrative");
@@ -23,53 +30,134 @@ function AppContent() {
     scenarioId: effectiveScenarioId,
   });
 
+  const assumptionsRef = useRef<AssumptionsPageHandle | null>(null);
+  const [scenarioExitModalOpen, setScenarioExitModalOpen] = useState(false);
+  const [pendingAssumptionsNav, setPendingAssumptionsNav] =
+    useState<PendingAssumptionsNav | null>(null);
+
+  const currentScenarioId =
+    selectedScenarioId ?? (scenarios.length > 0 ? scenarios[0]?.id : null);
+
   useEffect(() => {
-    // When the selected scenario changes, reload scenario data.
     if (effectiveScenarioId) {
       void refresh();
     }
   }, [effectiveScenarioId, refresh]);
 
+  const requestTabChange = (tab: TabId) => {
+    if (
+      activeTab === "assumptions" &&
+      tab !== "assumptions" &&
+      assumptionsRef.current?.isDirty()
+    ) {
+      setPendingAssumptionsNav({ type: "tab", tab });
+      setScenarioExitModalOpen(true);
+      return;
+    }
+    setActiveTab(tab);
+  };
+
+  const requestScenarioChange = (id: string) => {
+    if (
+      activeTab === "assumptions" &&
+      currentScenarioId !== null &&
+      id !== currentScenarioId &&
+      assumptionsRef.current?.isDirty()
+    ) {
+      setPendingAssumptionsNav({ type: "scenario", id });
+      setScenarioExitModalOpen(true);
+      return;
+    }
+    selectScenario(id);
+  };
+
+  const handleScenarioExitSaveAndLeave = async () => {
+    const pending = pendingAssumptionsNav;
+    if (!pending) {
+      return;
+    }
+    try {
+      await assumptionsRef.current?.saveDraft();
+    } catch {
+      return;
+    }
+    if (pending.type === "tab") {
+      setActiveTab(pending.tab);
+    } else {
+      selectScenario(pending.id);
+    }
+    setScenarioExitModalOpen(false);
+    setPendingAssumptionsNav(null);
+  };
+
+  const handleScenarioExitDiscardAndLeave = () => {
+    const pending = pendingAssumptionsNav;
+    if (!pending) {
+      return;
+    }
+    assumptionsRef.current?.revertDraft();
+    if (pending.type === "tab") {
+      setActiveTab(pending.tab);
+    } else {
+      selectScenario(pending.id);
+    }
+    setScenarioExitModalOpen(false);
+    setPendingAssumptionsNav(null);
+  };
+
+  const handleScenarioExitCancel = () => {
+    setScenarioExitModalOpen(false);
+    setPendingAssumptionsNav(null);
+  };
+
   return (
-    <div className="flex h-screen min-h-0 flex-col overflow-hidden">
-      <GlobalNav
-        activeTab={activeTab}
-        onTabChange={setActiveTab}
-        scenarioTitle={scenario?.scenarioInfo.scenarioTitle}
-        scenarios={scenarios}
-        selectedScenarioId={effectiveScenarioId ?? null}
-        onScenarioChange={selectScenario}
+    <>
+      <div className="flex h-screen min-h-0 flex-col overflow-hidden">
+        <GlobalNav
+          activeTab={activeTab}
+          onTabChange={requestTabChange}
+          scenarios={scenarios}
+          selectedScenarioId={effectiveScenarioId ?? null}
+          onScenarioChange={requestScenarioChange}
+        />
+        <main
+          className={`flex-1 min-h-0 p-6 bg-bg-primary text-text-primary font-ui flex flex-col ${
+            activeTab === "timeline" ? "overflow-hidden" : "overflow-y-auto"
+          }`}
+          role="main"
+        >
+          {activeTab === "narrative" && (
+            <NarrativePage
+              scenario={scenario}
+              loading={loading || scenariosLoading}
+              onPersist={persist}
+            />
+          )}
+          {activeTab === "timeline" && (
+            <TimelinePage
+              scenario={scenario}
+              loading={loading || scenariosLoading}
+              onPersist={persist}
+            />
+          )}
+          {activeTab === "assumptions" && (
+            <AssumptionsPage
+              ref={assumptionsRef}
+              scenario={scenario}
+              loading={loading || scenariosLoading}
+              error={error ?? scenariosError ?? null}
+              onSave={save}
+            />
+          )}
+        </main>
+      </div>
+      <ScenarioDetailsExitModal
+        isOpen={scenarioExitModalOpen}
+        onSaveAndLeave={handleScenarioExitSaveAndLeave}
+        onDiscardAndLeave={handleScenarioExitDiscardAndLeave}
+        onCancel={handleScenarioExitCancel}
       />
-      <main
-        className={`flex-1 min-h-0 p-6 bg-bg-primary text-text-primary font-ui flex flex-col ${
-          activeTab === "timeline" ? "overflow-hidden" : "overflow-y-auto"
-        }`}
-        role="main"
-      >
-        {activeTab === "narrative" && (
-          <NarrativePage
-            scenario={scenario}
-            loading={loading || scenariosLoading}
-            onPersist={persist}
-          />
-        )}
-        {activeTab === "timeline" && (
-          <TimelinePage
-            scenario={scenario}
-            loading={loading || scenariosLoading}
-            onPersist={persist}
-          />
-        )}
-        {activeTab === "assumptions" && (
-          <AssumptionsPage
-            scenario={scenario}
-            loading={loading || scenariosLoading}
-            error={error ?? scenariosError ?? null}
-            onSave={save}
-          />
-        )}
-      </main>
-    </div>
+    </>
   );
 }
 

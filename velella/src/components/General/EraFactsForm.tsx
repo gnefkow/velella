@@ -1,12 +1,9 @@
 import { Button, Text } from "../../../../../counterfoil-kit/src/index.ts";
-import {
-  ChevronDown,
-  ChevronRight,
-  Link2,
-} from "lucide-react";
+import { ChevronDown, ChevronRight, Info, Link2, Unlink } from "lucide-react";
 import { useMemo, useState, type ReactNode } from "react";
 import type { EraFacts, YearFactsFieldKey } from "../../types/era";
-import type { FilingStatus, HouseholdMember } from "../../types/scenario";
+import type { FilingStatus, HouseholdMember, YearInput } from "../../types/scenario";
+import type { TaxEstimatorReferenceData } from "../../types/taxReferenceData";
 import {
   FILING_STATUS_SELECT_OPTIONS,
   labelForFilingStatus,
@@ -27,6 +24,8 @@ import {
   ESTIMATED_FEDERAL_TAX_EXPENSE,
   expensesWithSyncedTaxTotal,
 } from "../../lib/yearFacts";
+import { estimateTax } from "../../engine/estimateTax";
+import { REALIZED_GAIN_BASIS_UI_NOTE } from "../../engine/tax/gainsBasis";
 import FilingStatusApplyModal from "./FilingStatusApplyModal";
 import EraInvestmentBreakdownModal from "./EraInvestmentBreakdownModal";
 import EraOverridesModal, {
@@ -42,9 +41,10 @@ import EraSocialSecurityFieldRows from "./EraSocialSecurityFieldRows";
 import EraPreTaxDistributionEligibilityNotices from "./EraPreTaxDistributionEligibilityNotices";
 import EraPreTaxDistributionFieldRow from "./EraPreTaxDistributionFieldRow";
 import EraRothDistributionsFieldRow from "./EraRothDistributionsFieldRow";
-import NoOverridesYetModal from "./NoOverridesYetModal";
 import UseEstimatedFederalTaxControl from "./UseEstimatedFederalTaxControl";
 import UseFederalTaxEstimateModal from "./UseFederalTaxEstimateModal";
+import FederalTaxPerYearEstimatesModal from "./FederalTaxPerYearEstimatesModal";
+import TaxEstimateBreakdownModal from "./TaxEstimateBreakdownModal";
 import {
   eraIncludesPreTaxDistributionEligibleYearForMember,
 } from "../../lib/preTaxDistributionEligibility";
@@ -63,6 +63,9 @@ interface EraFactsFormProps {
   eraStartYear: number | null;
   eraEndYear: number | null;
   eraYears: number[];
+  taxEstimatorRef?: TaxEstimatorReferenceData | null;
+  /** Resolved preview inputs for each year in the era (draft + scenario + overrides). */
+  resolvedYearInputsForEra?: YearInput[];
   overrideFieldDescriptors: EraOverrideFieldDescriptor[];
   draftOverridesByField: EraOverrideDraft;
   overrideSummariesByField: Partial<Record<YearFactsFieldKey, string>>;
@@ -199,6 +202,8 @@ export default function EraFactsForm({
   eraStartYear,
   eraEndYear,
   eraYears,
+  taxEstimatorRef = null,
+  resolvedYearInputsForEra = [],
   overrideFieldDescriptors,
   draftOverridesByField,
   overrideSummariesByField,
@@ -209,7 +214,10 @@ export default function EraFactsForm({
   const [showRemoveBreakdownModal, setShowRemoveBreakdownModal] = useState(false);
   const [showFederalTaxEstimateModal, setShowFederalTaxEstimateModal] =
     useState(false);
-  const [showNoOverridesYetModal, setShowNoOverridesYetModal] = useState(false);
+  const [showFederalTaxPerYearModal, setShowFederalTaxPerYearModal] =
+    useState(false);
+  const [showTaxEstimateBreakdownModal, setShowTaxEstimateBreakdownModal] =
+    useState(false);
   const [filingApplyTarget, setFilingApplyTarget] = useState<FilingStatus | null>(
     null
   );
@@ -254,25 +262,94 @@ export default function EraFactsForm({
     }
     closeOverridesModal();
   };
+
+  const averageFederalEstimate = useMemo(() => {
+    if (
+      taxEstimatorRef == null ||
+      resolvedYearInputsForEra.length === 0
+    ) {
+      return ESTIMATED_FEDERAL_TAX_EXPENSE;
+    }
+    const sum = resolvedYearInputsForEra.reduce(
+      (acc, yi) =>
+        acc + estimateTax(yi, taxEstimatorRef).estimatedFederalTaxExpense,
+      0
+    );
+    return sum / resolvedYearInputsForEra.length;
+  }, [taxEstimatorRef, resolvedYearInputsForEra]);
+
+  const federalTaxRowsForModal = useMemo(() => {
+    if (!taxEstimatorRef || resolvedYearInputsForEra.length === 0) {
+      return resolvedYearInputsForEra.map((yi) => ({
+        year: yi.year,
+        federalTax: ESTIMATED_FEDERAL_TAX_EXPENSE,
+      }));
+    }
+    return resolvedYearInputsForEra.map((yi) => ({
+      year: yi.year,
+      federalTax: estimateTax(yi, taxEstimatorRef).estimatedFederalTaxExpense,
+    }));
+  }, [taxEstimatorRef, resolvedYearInputsForEra]);
+
+  const eraTaxEstimateBreakdown = useMemo(() => {
+    if (!taxEstimatorRef || resolvedYearInputsForEra.length === 0) {
+      return null;
+    }
+    return estimateTax(resolvedYearInputsForEra[0], taxEstimatorRef);
+  }, [taxEstimatorRef, resolvedYearInputsForEra]);
+
+  const eraTaxBreakdownYearLabel =
+    resolvedYearInputsForEra.length > 0
+      ? `Year ${resolvedYearInputsForEra[0].year}`
+      : "";
+
   const eraAsYearInput = yearInputFromEraFacts(eraFacts);
+
+  const yearInputForInvestMetrics = useMemo(() => {
+    if (
+      eraFacts.expenses.federalTaxSource !== "use-estimate" ||
+      !taxEstimatorRef ||
+      resolvedYearInputsForEra.length === 0
+    ) {
+      return eraAsYearInput;
+    }
+    const seed = Math.round(averageFederalEstimate);
+    return {
+      ...eraAsYearInput,
+      expenses: expensesWithSyncedTaxTotal({
+        ...eraAsYearInput.expenses,
+        federalTaxSource: "manual",
+        selectedFederalTaxAmount: seed,
+      }),
+    };
+  }, [
+    eraAsYearInput,
+    eraFacts.expenses.federalTaxSource,
+    taxEstimatorRef,
+    resolvedYearInputsForEra.length,
+    averageFederalEstimate,
+  ]);
+
   const { totalIncome } = useMemo(
-    () => calculateYearFacts(eraAsYearInput),
-    [eraAsYearInput]
+    () => calculateYearFacts(yearInputForInvestMetrics, null),
+    [yearInputForInvestMetrics]
   );
   const availableToInvest = useMemo(
-    () => availableToInvestFromYearInput(eraAsYearInput),
-    [eraAsYearInput]
+    () => availableToInvestFromYearInput(yearInputForInvestMetrics, null),
+    [yearInputForInvestMetrics]
   );
   const cashflowSummary = useMemo(
-    () => cashflowSummaryFromYearInput(eraAsYearInput),
-    [eraAsYearInput]
+    () => cashflowSummaryFromYearInput(yearInputForInvestMetrics, null),
+    [yearInputForInvestMetrics]
   );
   const effectiveInvest = useMemo(
-    () => effectiveInvestFromYearInput(eraAsYearInput),
-    [eraAsYearInput]
+    () => effectiveInvestFromYearInput(yearInputForInvestMetrics, null),
+    [yearInputForInvestMetrics]
   );
-  const investmentDifference =
-    investmentDifferenceFromYearInput(eraAsYearInput);
+  const investmentDifference = investmentDifferenceFromYearInput(
+    yearInputForInvestMetrics,
+    null
+  );
   const showPreTaxDistributionsOutsideAccordion =
     eraStartYear != null &&
     eraEndYear != null &&
@@ -293,10 +370,18 @@ export default function EraFactsForm({
     eraFacts.otherIncome.interestIncome +
     eraFacts.otherIncome.shortTermCapitalGains +
     eraFacts.otherIncome.longTermCapitalGains;
+  const usingFederalTaxEstimate =
+    eraFacts.expenses.federalTaxSource === "use-estimate";
+  const federalExpensePortion = usingFederalTaxEstimate
+    ? averageFederalEstimate
+    : eraFacts.expenses.selectedFederalTaxAmount;
   const expenseTotal =
     eraFacts.expenses.householdExpenses +
-    eraFacts.expenses.taxes +
+    federalExpensePortion +
+    eraFacts.expenses.stateLocalTaxLiability +
     eraFacts.expenses.otherExpenses;
+  const totalTaxDisplay =
+    federalExpensePortion + eraFacts.expenses.stateLocalTaxLiability;
   const investmentTotal = eraFacts.modifyInvestmentDetails
     ? investmentBreakdownTotal(eraFacts)
     : effectiveInvest;
@@ -329,9 +414,6 @@ export default function EraFactsForm({
     );
   };
 
-  const usingFederalTaxEstimate =
-    eraFacts.expenses.federalTaxSource === "use-estimate";
-
   const applyFederalTaxEstimate = () => {
     onUpdateEraFacts((prev) => ({
       ...prev,
@@ -344,12 +426,23 @@ export default function EraFactsForm({
   };
 
   const applyManualFederalTax = () => {
+    const seed =
+      taxEstimatorRef && resolvedYearInputsForEra.length > 0
+        ? Math.round(
+            resolvedYearInputsForEra.reduce(
+              (acc, yi) =>
+                acc +
+                estimateTax(yi, taxEstimatorRef).estimatedFederalTaxExpense,
+              0
+            ) / resolvedYearInputsForEra.length
+          )
+        : ESTIMATED_FEDERAL_TAX_EXPENSE;
     onUpdateEraFacts((prev) => ({
       ...prev,
       expenses: expensesWithSyncedTaxTotal({
         ...prev.expenses,
         federalTaxSource: "manual",
-        selectedFederalTaxAmount: ESTIMATED_FEDERAL_TAX_EXPENSE,
+        selectedFederalTaxAmount: seed,
       }),
     }));
   };
@@ -515,6 +608,13 @@ export default function EraFactsForm({
                     }))
                 )}
               </EraPaneFactRow>
+              <Text
+                size="body2"
+                hierarchy="secondary"
+                className="px-2 pb-2 text-left"
+              >
+                {REALIZED_GAIN_BASIS_UI_NOTE}
+              </Text>
               <EraPaneFactRow
                 label="Realized Taxable Gains (Long Term)"
                 description="Capital gains income for assets sold that were held for more than one year."
@@ -533,6 +633,13 @@ export default function EraFactsForm({
                     }))
                 )}
               </EraPaneFactRow>
+              <Text
+                size="body2"
+                hierarchy="secondary"
+                className="px-2 pb-2 text-left"
+              >
+                {REALIZED_GAIN_BASIS_UI_NOTE}
+              </Text>
               <Text
                 as="h4"
                 size="h5"
@@ -665,17 +772,47 @@ export default function EraFactsForm({
                 />
               </div>
               <div className="flex shrink-0 justify-end">
-                {usingFederalTaxEstimate ? (
-                  <p
-                    className="text-right text-body-1 text-text-primary"
-                    style={{ margin: 0 }}
-                  >
-                    {formatCurrency(ESTIMATED_FEDERAL_TAX_EXPENSE)}
-                  </p>
+                {overrideSummariesByField["selected-federal-tax-amount"] ? (
+                  <EraPaneOverrideSummary
+                    fieldLabel="Taxes: Federal"
+                    summary={
+                      overrideSummariesByField["selected-federal-tax-amount"]!
+                    }
+                    onEdit={() =>
+                      openOverridesForField("selected-federal-tax-amount")
+                    }
+                  />
+                ) : usingFederalTaxEstimate ? (
+                  <div className="flex max-w-full shrink-0 items-center gap-2">
+                    <p
+                      className="text-right text-body-1 text-text-primary"
+                      style={{ margin: 0 }}
+                    >
+                      {formatCurrency(averageFederalEstimate)}
+                    </p>
+                    <button
+                      type="button"
+                      aria-label="Federal estimate by year"
+                      onClick={(event) => {
+                        event.preventDefault();
+                        setShowFederalTaxPerYearModal(true);
+                      }}
+                      className={[
+                        "inline-flex size-5 shrink-0 items-center justify-center rounded-full border-0 bg-transparent p-0 shadow-none appearance-none",
+                        "text-text-secondary transition-colors hover:bg-bg-primary-hover hover:text-text-primary",
+                        "focus:outline-none focus-visible:ring-2 focus-visible:ring-input focus-visible:ring-offset-2",
+                      ].join(" ")}
+                    >
+                      <Link2 size={16} aria-hidden />
+                    </button>
+                  </div>
                 ) : (
-                  <EraPaneAmountInput
+                    <EraPaneAmountInput
                     label="Taxes: Federal"
                     value={eraFacts.expenses.selectedFederalTaxAmount}
+                      linkIcon="link"
+                    linkAriaLabel="Federal estimate by year"
+                    onLinkClick={() => setShowFederalTaxPerYearModal(true)}
                     onCommit={(value) =>
                       onUpdateEraFacts((prev) => ({
                         ...prev,
@@ -690,25 +827,33 @@ export default function EraFactsForm({
                 )}
               </div>
             </div>
-            <div className="flex w-full justify-start gap-2">
-              <UseEstimatedFederalTaxControl
-                checked={usingFederalTaxEstimate}
-                onChange={handleFederalTaxEstimateToggle}
-              />
+            <div className="flex w-full min-w-0 items-center gap-2">
+              <div className="min-w-0 flex-1">
+                <UseEstimatedFederalTaxControl
+                  checked={usingFederalTaxEstimate}
+                  onChange={handleFederalTaxEstimateToggle}
+                  estimatedFederalAmount={averageFederalEstimate}
+                />
+              </div>
               <button
                 type="button"
-                aria-label="Year overrides for Taxes: Federal"
+                aria-label="Federal tax estimate details"
+                disabled={
+                  taxEstimatorRef == null ||
+                  resolvedYearInputsForEra.length === 0
+                }
                 onClick={(event) => {
                   event.preventDefault();
-                  setShowNoOverridesYetModal(true);
+                  setShowTaxEstimateBreakdownModal(true);
                 }}
                 className={[
                   "inline-flex size-5 shrink-0 items-center justify-center rounded-full border-0 bg-transparent p-0 shadow-none appearance-none",
                   "text-text-secondary transition-colors hover:bg-bg-primary-hover hover:text-text-primary",
                   "focus:outline-none focus-visible:ring-2 focus-visible:ring-input focus-visible:ring-offset-2",
+                  "disabled:cursor-not-allowed disabled:opacity-50",
                 ].join(" ")}
               >
-                <Link2 size={16} aria-hidden />
+                <Info size={16} aria-hidden />
               </button>
             </div>
           </div>
@@ -732,7 +877,7 @@ export default function EraFactsForm({
           </EraPaneFactRow>
           <EraPaneReadonlyRow
             label="Total Tax"
-            value={eraFacts.expenses.taxes}
+            value={totalTaxDisplay}
             description="Federal plus state and local tax estimates."
           />
           <EraPaneFactRow
@@ -964,15 +1109,24 @@ export default function EraFactsForm({
         currentManualAmountLabel={formatCurrency(
           eraFacts.expenses.selectedFederalTaxAmount
         )}
+        federalEstimateAmount={averageFederalEstimate}
         onCancel={() => setShowFederalTaxEstimateModal(false)}
         onConfirm={() => {
           applyFederalTaxEstimate();
           setShowFederalTaxEstimateModal(false);
         }}
       />
-      <NoOverridesYetModal
-        isOpen={showNoOverridesYetModal}
-        onClose={() => setShowNoOverridesYetModal(false)}
+      <FederalTaxPerYearEstimatesModal
+        isOpen={showFederalTaxPerYearModal}
+        onClose={() => setShowFederalTaxPerYearModal(false)}
+        eraLabel={eraNickname || "This era"}
+        rows={federalTaxRowsForModal}
+      />
+      <TaxEstimateBreakdownModal
+        isOpen={showTaxEstimateBreakdownModal}
+        onClose={() => setShowTaxEstimateBreakdownModal(false)}
+        yearLabel={eraTaxBreakdownYearLabel}
+        result={eraTaxEstimateBreakdown}
       />
       {selectedOverrideField !== null && selectedOverrideFieldKey !== null ? (
         <EraOverridesModal

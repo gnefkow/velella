@@ -1,8 +1,12 @@
 import type { YearInput } from "../types/scenario";
 import type { FederalTaxSource } from "../types/tax";
+import type { TaxEstimatorReferenceData } from "../types/taxReferenceData";
+import type { TaxEstimateResult } from "../types/taxEstimate";
+import { estimateTax } from "../engine/estimateTax";
 import { DEFAULT_FILING_STATUS } from "./filingStatus";
 
-export const ESTIMATED_FEDERAL_TAX_EXPENSE = 9_999;
+/** Fallback when estimate mode is on but tax reference data is missing or engine fails. */
+export const ESTIMATED_FEDERAL_TAX_EXPENSE = 9_999_999;
 
 type TaxExpenseInput = Omit<
   YearInput["expenses"],
@@ -17,6 +21,47 @@ export function effectiveFederalTaxAmount(
   return federalTaxSource === "use-estimate"
     ? ESTIMATED_FEDERAL_TAX_EXPENSE
     : selectedFederalTaxAmount;
+}
+
+/** Federal amount used in live year math when estimate mode is on. */
+export function federalTaxAmountForYearInput(
+  yearInput: YearInput | undefined,
+  taxEstimatorRef?: TaxEstimatorReferenceData | null
+): number {
+  if (!yearInput) return 0;
+  const source = yearInput.expenses.federalTaxSource ?? "manual";
+  if (source !== "use-estimate") {
+    return yearInput.expenses.selectedFederalTaxAmount ?? 0;
+  }
+  if (!taxEstimatorRef) {
+    return ESTIMATED_FEDERAL_TAX_EXPENSE;
+  }
+  return estimateTax(yearInput, taxEstimatorRef).estimatedFederalTaxExpense;
+}
+
+export function totalTaxExpenseForYearInput(
+  yearInput: YearInput | undefined,
+  taxEstimatorRef?: TaxEstimatorReferenceData | null
+): number {
+  return (
+    federalTaxAmountForYearInput(yearInput, taxEstimatorRef) +
+    (yearInput?.expenses.stateLocalTaxLiability ?? 0)
+  );
+}
+
+/** Breakdown for the estimate-details modal; null when not in estimate mode or no ref. */
+export function federalTaxEstimateBreakdown(
+  yearInput: YearInput | undefined,
+  taxEstimatorRef?: TaxEstimatorReferenceData | null
+): TaxEstimateResult | null {
+  if (
+    !yearInput ||
+    (yearInput.expenses.federalTaxSource ?? "manual") !== "use-estimate" ||
+    !taxEstimatorRef
+  ) {
+    return null;
+  }
+  return estimateTax(yearInput, taxEstimatorRef);
 }
 
 /** Combined tax expense used by year math; always federal + state/local. */
@@ -64,6 +109,8 @@ export interface CalculatedYearFacts {
   ordinaryIncome: number;
   totalIncome: number;
   totalExpenses: number;
+  /** Federal + state/local tax used in totalExpenses (live estimate when applicable). */
+  totalTaxExpense: number;
 }
 
 export function buildDefaultYearInput(
@@ -126,7 +173,10 @@ export function buildDefaultYearInput(
   return result;
 }
 
-export function calculateYearFacts(yearInput?: YearInput): CalculatedYearFacts {
+export function calculateYearFacts(
+  yearInput?: YearInput,
+  taxEstimatorRef?: TaxEstimatorReferenceData | null
+): CalculatedYearFacts {
   const wageIncome = Object.values(yearInput?.wageIncome ?? {}).reduce(
     (sum, value) => sum + (value ?? 0),
     0
@@ -146,7 +196,6 @@ export function calculateYearFacts(yearInput?: YearInput): CalculatedYearFacts {
   const rothDistributions =
     yearInput?.otherIncome.rothDistributions ?? 0;
   const householdExpenses = yearInput?.expenses.householdExpenses ?? 0;
-  const taxes = yearInput?.expenses.taxes ?? 0;
   const otherExpenses = yearInput?.expenses.otherExpenses ?? 0;
 
   // Until the tax engine differentiates rates, both dividend types roll into ordinary income.
@@ -161,11 +210,16 @@ export function calculateYearFacts(yearInput?: YearInput): CalculatedYearFacts {
   // Roth distributions are cash inflow in V1 but excluded from ordinaryIncome (non-taxable qualified).
   const totalIncome =
     ordinaryIncome + longTermCapitalGains + rothDistributions;
-  const totalExpenses = householdExpenses + taxes + otherExpenses;
+  const totalTaxExpense = totalTaxExpenseForYearInput(
+    yearInput,
+    taxEstimatorRef
+  );
+  const totalExpenses = householdExpenses + totalTaxExpense + otherExpenses;
 
   return {
     ordinaryIncome,
     totalIncome,
     totalExpenses,
+    totalTaxExpense,
   };
 }

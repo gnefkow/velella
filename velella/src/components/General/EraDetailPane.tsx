@@ -10,6 +10,7 @@ import {
 import { Button } from "../../../../../counterfoil-kit/src/index.ts";
 import type { Era, YearFactsFieldKey } from "../../types/era";
 import type { FilingStatus, Scenario } from "../../types/scenario";
+import type { TaxEstimatorReferenceData } from "../../types/taxReferenceData";
 import { buildDefaultEraFacts } from "../../lib/eraFacts";
 import {
   defaultFederalTaxSourceForYears,
@@ -28,6 +29,7 @@ import {
 } from "../../lib/eraOverrideDraft";
 import { buildEraOverrideFieldDescriptors } from "../../lib/eraOverrideFields";
 import { createEra, updateEra, deleteEra } from "../../services/eraService";
+import { resolveYearInputWithEraFacts } from "../../lib/resolveEraYearInput";
 import EraFactsForm from "./EraFactsForm";
 import EraDeleteModal from "./EraDeleteModal";
 import EraPaneHeader from "./EraPaneHeader";
@@ -43,6 +45,7 @@ export interface EraDraft {
 interface EraDetailPaneProps {
   scenario: Scenario;
   era: Era | null;
+  taxEstimatorRef?: TaxEstimatorReferenceData | null;
   onClose: () => void;
   onSave: (scenario: Scenario) => void;
   onBulkApplyFilingStatus?: (status: FilingStatus) => void;
@@ -104,6 +107,7 @@ const EraDetailPane = forwardRef<EraDetailPaneHandle, EraDetailPaneProps>(functi
   {
     scenario,
     era,
+    taxEstimatorRef = null,
     onClose,
     onSave,
     onBulkApplyFilingStatus,
@@ -135,6 +139,27 @@ const EraDetailPane = forwardRef<EraDetailPaneHandle, EraDetailPaneProps>(functi
 
     return yearsInRange(draft.startYear, draft.endYear);
   }, [draft.endYear, draft.startYear]);
+
+  const resolvedYearInputsForEra = useMemo(() => {
+    if (draft.startYear === null || draft.endYear === null) {
+      return [];
+    }
+    return draftEraYears.map((calendarYear) =>
+      resolveYearInputWithEraFacts(
+        scenario,
+        calendarYear,
+        draft.eraFacts,
+        draftOverridesByField
+      )
+    );
+  }, [
+    scenario,
+    draft.eraFacts,
+    draftOverridesByField,
+    draftEraYears,
+    draft.startYear,
+    draft.endYear,
+  ]);
 
   const defaultEraFactsForNewEra = useMemo(
     () =>
@@ -441,6 +466,8 @@ const EraDetailPane = forwardRef<EraDetailPaneHandle, EraDetailPaneProps>(functi
             eraStartYear={draft.startYear}
             eraEndYear={draft.endYear}
             eraYears={draftEraYears}
+            taxEstimatorRef={taxEstimatorRef}
+            resolvedYearInputsForEra={resolvedYearInputsForEra}
             overrideFieldDescriptors={overrideFieldDescriptors}
             draftOverridesByField={draftOverridesByField}
             overrideSummariesByField={overrideSummariesByField}

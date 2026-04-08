@@ -1,4 +1,5 @@
 import type { YearInput } from "../types/scenario";
+import type { TaxEstimatorReferenceData } from "../types/taxReferenceData";
 import { portfolioWithdrawalsFromYearInput } from "./portfolioWithdrawals";
 import { calculateYearFacts } from "./yearFacts";
 
@@ -16,9 +17,13 @@ export interface CashflowSummaryNumbers {
  * modeled for the timeline engine).
  */
 export function cashflowSummaryFromYearInput(
-  yearInput: YearInput
+  yearInput: YearInput,
+  taxEstimatorRef?: TaxEstimatorReferenceData | null
 ): CashflowSummaryNumbers {
-  const { totalIncome, totalExpenses } = calculateYearFacts(yearInput);
+  const { totalIncome, totalExpenses } = calculateYearFacts(
+    yearInput,
+    taxEstimatorRef
+  );
   const pullingFromPortfolio = portfolioWithdrawalsFromYearInput(yearInput);
   return {
     headerTotal: totalIncome - totalExpenses,

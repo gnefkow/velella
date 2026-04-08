@@ -29,7 +29,7 @@ export default function TimelineGroupHeader({
         <td
           colSpan={colSpan}
           className={[
-            "bg-accent-primary px-[1em] py-[0.25em] text-left",
+            "overflow-hidden rounded-tl-[2px] rounded-tr-[2px] border-b-0 border-r-0 border-t-0 border-l-[8px] border-l-accent-primary bg-accent-primary [border-left-style:solid] pl-0 pr-[1em] py-[0.25em] text-left",
             onSelectEraHeader ? "cursor-pointer" : "",
           ]
             .filter(Boolean)
@@ -50,7 +50,7 @@ export default function TimelineGroupHeader({
     <tr>
       <td
         colSpan={colSpan}
-        className="h-[0.5em] border-l-[0.5em] border-l-border-tertiary border-t-[0.5em] border-t-border-tertiary p-0 align-middle"
+        className="h-[0.5em] border-b-0 border-r-0 border-l-[8px] border-l-border-tertiary border-t-[0.5em] border-t-border-tertiary p-0 align-middle [border-left-style:solid] [border-top-style:solid]"
       />
     </tr>
   );

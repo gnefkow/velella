@@ -1,9 +1,9 @@
-import { ESTIMATED_FEDERAL_TAX_EXPENSE } from "../../lib/yearFacts";
-
 interface UseEstimatedFederalTaxControlProps {
   checked: boolean;
   disabled?: boolean;
   onChange: (next: boolean) => void;
+  /** Shown after the label; typically the current federal estimate for this context. */
+  estimatedFederalAmount: number;
 }
 
 function formatCurrency(value: number): string {
@@ -18,6 +18,7 @@ export default function UseEstimatedFederalTaxControl({
   checked,
   disabled = false,
   onChange,
+  estimatedFederalAmount,
 }: UseEstimatedFederalTaxControlProps) {
   return (
     <label className="inline-flex items-center gap-2 text-body-1 text-text-primary">
@@ -30,7 +31,7 @@ export default function UseEstimatedFederalTaxControl({
       />
       <span>
         Use Estimated Federal Tax Expense:{" "}
-        {formatCurrency(ESTIMATED_FEDERAL_TAX_EXPENSE)}
+        {formatCurrency(estimatedFederalAmount)}
       </span>
     </label>
   );

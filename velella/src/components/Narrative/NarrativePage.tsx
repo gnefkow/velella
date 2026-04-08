@@ -1,9 +1,11 @@
-import { useState, useCallback, useEffect, useRef } from "react";
+import { useState, useCallback, useEffect, useMemo, useRef } from "react";
 import { Stack, Text } from "../../../../../counterfoil-kit/src/index.ts";
 import type { Era } from "../../types/era";
 import { applyFilingStatusGlobally } from "../../lib/filingStatus";
 import type { FilingStatus, Scenario } from "../../types/scenario";
 import EraDetailPane, { type EraDetailPaneHandle } from "../General/EraDetailPane";
+import { useTaxReferenceData } from "../../hooks/useTaxReferenceData";
+import { toTaxEstimatorReferenceData } from "../../services/taxReferenceDataService";
 import EraUnsavedChangesModal from "../General/EraUnsavedChangesModal";
 import ErasList from "./ErasList";
 
@@ -30,6 +32,12 @@ export default function NarrativePage({
   const [pendingAfterUnsavedModal, setPendingAfterUnsavedModal] =
     useState<NarrativePendingAfterUnsavedModal | null>(null);
   const eraPaneRef = useRef<EraDetailPaneHandle | null>(null);
+  const { taxReferenceData } = useTaxReferenceData();
+  const taxEstimatorRef = useMemo(
+    () =>
+      taxReferenceData ? toTaxEstimatorReferenceData(taxReferenceData) : null,
+    [taxReferenceData]
+  );
 
   useEffect(() => {
     setLocalScenario(scenario);
@@ -185,6 +193,7 @@ export default function NarrativePage({
           key={selectedEra?.id ?? "new-era"}
           scenario={localScenario}
           era={selectedEra}
+          taxEstimatorRef={taxEstimatorRef}
           onClose={requestClosePane}
           onSave={handleSave}
           onBulkApplyFilingStatus={handleBulkApplyFilingStatus}

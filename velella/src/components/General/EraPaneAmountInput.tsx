@@ -1,11 +1,15 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Link2 } from "lucide-react";
+import { Link2, Unlink } from "lucide-react";
 
 interface EraPaneAmountInputProps {
   value: number;
   onCommit: (value: number) => void;
   label: string;
   onLinkClick?: () => void;
+  /** Icon for year override action; default matches other era rows. */
+  linkIcon?: "link" | "unlink";
+  /** Overrides default "Year overrides for {label}" on the link button. */
+  linkAriaLabel?: string;
 }
 
 function digitsFromNumber(value: number): string {
@@ -43,6 +47,8 @@ export default function EraPaneAmountInput({
   onCommit,
   label,
   onLinkClick,
+  linkIcon = "link",
+  linkAriaLabel,
 }: EraPaneAmountInputProps) {
   const [rawValue, setRawValue] = useState(digitsFromNumber(value));
   const [isFocused, setIsFocused] = useState(false);
@@ -117,7 +123,7 @@ export default function EraPaneAmountInput({
       {onLinkClick ? (
         <button
           type="button"
-          aria-label={`Year overrides for ${label}`}
+          aria-label={linkAriaLabel ?? `Year overrides for ${label}`}
           onClick={(e) => {
             e.preventDefault();
             onLinkClick();
@@ -128,7 +134,11 @@ export default function EraPaneAmountInput({
             "focus:outline-none focus-visible:ring-2 focus-visible:ring-input focus-visible:ring-offset-2",
           ].join(" ")}
         >
-          <Link2 size={16} aria-hidden />
+          {linkIcon === "unlink" ? (
+            <Unlink size={16} aria-hidden />
+          ) : (
+            <Link2 size={16} aria-hidden />
+          )}
         </button>
       ) : null}
     </div>

@@ -1,5 +1,6 @@
 import type { Scenario } from "../types/scenario";
 import type { Year } from "../types/year";
+import type { TaxEstimatorReferenceData } from "../types/taxReferenceData";
 import { buildDefaultYearInput, calculateYearFacts } from "../lib/yearFacts";
 import { effectiveInvestFromYearInput } from "../lib/invest";
 import { portfolioWithdrawalsFromYearInput } from "../lib/portfolioWithdrawals";
@@ -18,7 +19,10 @@ import { portfolioWithdrawalsFromYearInput } from "../lib/portfolioWithdrawals";
  *   next year's portfolioBeg = this year's portfolioEnd
  */
 
-export function calculateTimeline(scenario: Scenario): Year[] {
+export function calculateTimeline(
+  scenario: Scenario,
+  taxEstimatorRef?: TaxEstimatorReferenceData | null
+): Year[] {
   const { yearStart, yearEnd } = scenario.scenarioInfo;
   const { initialPortfolio, inflationRate, marketReturn } = scenario.assumptions;
   const yearInputsByYear = new Map(scenario.years.map((yearInput) => [yearInput.year, yearInput]));
@@ -38,9 +42,12 @@ export function calculateTimeline(scenario: Scenario): Year[] {
     const yearInput =
       yearInputsByYear.get(year) ??
       buildDefaultYearInput(year, incomeEarnerIds);
-    const { totalIncome, totalExpenses } = calculateYearFacts(yearInput);
+    const { totalIncome, totalExpenses } = calculateYearFacts(
+      yearInput,
+      taxEstimatorRef
+    );
     const availableToInvest = totalIncome - totalExpenses;
-    const invest = effectiveInvestFromYearInput(yearInput);
+    const invest = effectiveInvestFromYearInput(yearInput, taxEstimatorRef);
     const withdrawals = portfolioWithdrawalsFromYearInput(yearInput);
 
     const portfolioEnd =

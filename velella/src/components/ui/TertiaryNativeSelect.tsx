@@ -33,6 +33,12 @@ const shellInteractiveClasses =
   "focus-within:ring-2 focus-within:ring-button-tertiary focus-within:ring-offset-2 " +
   "active:ring-2 active:ring-button-tertiary active:ring-offset-2";
 
+/** Same colors/hover as tertiary select, without rings (for `<button>` triggers — use `focus-visible:ring-*` on the button). */
+const shellInteractiveMenuTriggerClasses =
+  "bg-[var(--button-tertiary-bg)] text-[var(--button-tertiary-text)] " +
+  "hover:bg-[var(--button-tertiary-bg-hover)] " +
+  "active:bg-[var(--button-tertiary-bg-active)]";
+
 const shellDisabledClasses =
   "cursor-not-allowed bg-[var(--button-tertiary-bg-disabled)] " +
   "text-[var(--button-tertiary-text-disabled)] pointer-events-none " +
@@ -43,6 +49,47 @@ const labelRowClasses =
   "pointer-events-none relative z-0 flex items-center justify-center " +
   "gap-[var(--button-icon-gap)] px-[var(--button-padding-x-md)] py-[var(--button-padding-y-md)] " +
   "text-button-md";
+
+/**
+ * Closed-state shell for controls that should match `TertiaryNativeSelect` (e.g. custom menu triggers).
+ *
+ * **Native `<button>` vs this component:** `TertiaryNativeSelect` wraps a `<div>` plus an invisible
+ * `<select>`, so it never picks up the browser’s default button border / inner padding. If you reuse
+ * this shell on a real `<button>`, you will often see a ~1–2px gray “outline” (UA border or Firefox
+ * `::-moz-focus-inner`) unless you reset it. Prefer `variant: "menu-trigger"` and, on the `<button>`,
+ * combine with something like: `border-0 p-0 appearance-none shadow-none`,
+ * `[&::-moz-focus-inner]:border-0 [&::-moz-focus-inner]:p-0`,
+ * `[-webkit-tap-highlight-color:transparent]`, `outline-none`, optional `focus:ring-0` when closed,
+ * and `focus-visible:ring-2 focus-visible:ring-button-tertiary focus-visible:ring-offset-2` for
+ * keyboard focus. See `GlobalNav` (⋯ menu trigger) for a working example.
+ */
+export function getTertiaryNativeSelectShellClassName(options?: {
+  disabled?: boolean;
+  className?: string;
+  /**
+   * `menu-trigger`: shell omits `focus-within` / `active` rings (use `focus-visible:ring-*` on the
+   * `<button>` instead). Still apply the UA `<button>` resets described in the function JSDoc above.
+   */
+  variant?: "select" | "menu-trigger";
+}): string {
+  const disabled = options?.disabled ?? false;
+  const interactive =
+    options?.variant === "menu-trigger"
+      ? shellInteractiveMenuTriggerClasses
+      : shellInteractiveClasses;
+  return [
+    shellBaseClasses,
+    disabled ? shellDisabledClasses : interactive,
+    options?.className,
+  ]
+    .filter(Boolean)
+    .join(" ");
+}
+
+/** Inner row padding/typography for a clickable tertiary-style trigger (no `pointer-events-none`). */
+export const tertiaryNativeSelectTriggerInnerClassName =
+  "flex items-center justify-center gap-[var(--button-icon-gap)] " +
+  "px-[var(--button-padding-x-md)] py-[var(--button-padding-y-md)] text-button-md";
 
 const selectOverlayClasses =
   "absolute inset-0 z-10 m-0 h-full w-full cursor-pointer appearance-none border-0 p-0 " +
@@ -70,13 +117,10 @@ export default function TertiaryNativeSelect({
   const displayLabel =
     controlledValue !== "" ? (selected?.label ?? controlledValue) : placeholder;
 
-  const shellClassName = [
-    shellBaseClasses,
-    disabled ? shellDisabledClasses : shellInteractiveClasses,
+  const shellClassName = getTertiaryNativeSelectShellClassName({
+    disabled,
     className,
-  ]
-    .filter(Boolean)
-    .join(" ");
+  });
 
   const visibleLabelClassName = [labelRowClasses, labelClassName]
     .filter(Boolean)

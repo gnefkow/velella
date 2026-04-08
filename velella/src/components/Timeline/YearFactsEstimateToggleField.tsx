@@ -3,6 +3,7 @@ import { Button, Stack, Text } from "../../../../../counterfoil-kit/src/index.ts
 import { HelpCircle, Unlink } from "lucide-react";
 import InfoBubble from "../General/InfoBubble";
 import UseEstimatedFederalTaxControl from "../General/UseEstimatedFederalTaxControl";
+import { ESTIMATED_FEDERAL_TAX_EXPENSE } from "../../lib/yearFacts";
 
 interface YearFactsEstimateToggleFieldProps {
   description: string;
@@ -72,6 +73,7 @@ export default function YearFactsEstimateToggleField({
           checked={checked}
           disabled={disabled}
           onChange={onChange}
+          estimatedFederalAmount={ESTIMATED_FEDERAL_TAX_EXPENSE}
         />
       </Stack>
     </div>

@@ -1,6 +1,6 @@
 import { useRef, useState } from "react";
 import { Button, Stack, Text } from "../../../../../counterfoil-kit/src/index.ts";
-import { HelpCircle, RotateCcw, Unlink } from "lucide-react";
+import { HelpCircle, Info, RotateCcw, Unlink } from "lucide-react";
 import InfoBubble from "../General/InfoBubble";
 import EditableAmountCell, { type FocusAndEditHandle } from "./EditableAmountCell";
 import UseEstimatedFederalTaxControl from "../General/UseEstimatedFederalTaxControl";
@@ -9,8 +9,12 @@ interface YearFactsFederalTaxFieldProps {
   title: string;
   description: string;
   value: number;
+  /** Amount shown in the “Use estimated…” checkbox row while estimate mode is on. */
+  estimatedFederalAmount: number;
   useEstimate: boolean;
   onToggleEstimate: (next: boolean) => void;
+  showEstimateBreakdown?: boolean;
+  onOpenEstimateBreakdown?: () => void;
   onCommit?: (value: number) => void;
   cellKey?: string;
   registerCell?: (key: string, handle: FocusAndEditHandle | null) => void;
@@ -33,8 +37,11 @@ export default function YearFactsFederalTaxField({
   title,
   description,
   value,
+  estimatedFederalAmount,
   useEstimate,
   onToggleEstimate,
+  showEstimateBreakdown = false,
+  onOpenEstimateBreakdown,
   onCommit,
   cellKey,
   registerCell,
@@ -82,6 +89,15 @@ export default function YearFactsFederalTaxField({
                 onClick={onRelink}
               />
             ) : null}
+            {useEstimate && showEstimateBreakdown && onOpenEstimateBreakdown ? (
+              <Button
+                variant="tertiary"
+                size="sm"
+                icon={<Info size={16} />}
+                aria-label={`Federal tax estimate details for ${title}`}
+                onClick={onOpenEstimateBreakdown}
+              />
+            ) : null}
             <span ref={triggerRef}>
               <Button
                 variant="tertiary"
@@ -124,6 +140,7 @@ export default function YearFactsFederalTaxField({
         <UseEstimatedFederalTaxControl
           checked={useEstimate}
           onChange={onToggleEstimate}
+          estimatedFederalAmount={estimatedFederalAmount}
         />
       </Stack>
     </div>

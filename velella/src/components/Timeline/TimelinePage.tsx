@@ -10,6 +10,8 @@ import {
 import type { Era } from "../../types/era";
 import { applyFilingStatusGlobally } from "../../lib/filingStatus";
 import type { FilingStatus, Scenario, YearInput } from "../../types/scenario";
+import { useTaxReferenceData } from "../../hooks/useTaxReferenceData";
+import { toTaxEstimatorReferenceData } from "../../services/taxReferenceDataService";
 import EraDetailPane, { type EraDetailPaneHandle } from "../General/EraDetailPane";
 import EraUnsavedChangesModal from "../General/EraUnsavedChangesModal";
 import TimelineTable from "./TimelineTable";
@@ -47,6 +49,12 @@ export default function TimelinePage({
   const persistTimerRef = useRef<number | null>(null);
   const latestScenarioRef = useRef<Scenario | null>(scenario);
   const eraPaneRef = useRef<EraDetailPaneHandle | null>(null);
+  const { taxReferenceData } = useTaxReferenceData();
+  const taxEstimatorRef = useMemo(
+    () =>
+      taxReferenceData ? toTaxEstimatorReferenceData(taxReferenceData) : null,
+    [taxReferenceData]
+  );
 
   useEffect(() => {
     // The timeline keeps a local draft so edits can recalculate immediately
@@ -200,8 +208,9 @@ export default function TimelinePage({
   );
 
   const years = useMemo(
-    () => (localScenario ? calculateTimeline(localScenario) : []),
-    [localScenario]
+    () =>
+      localScenario ? calculateTimeline(localScenario, taxEstimatorRef) : [],
+    [localScenario, taxEstimatorRef]
   );
 
   const activeSelectedYear = useMemo(() => {
@@ -439,6 +448,7 @@ export default function TimelinePage({
           <YearFactsPane
             scenario={localScenario}
             selectedYearInput={selectedYearInput}
+            taxEstimatorRef={taxEstimatorRef}
             onUpdateYearInput={handleYearInputUpdate}
             onOverrideField={handleOverrideField}
             onRelinkField={handleRelinkField}
@@ -453,6 +463,7 @@ export default function TimelinePage({
             ref={eraPaneRef}
             scenario={localScenario}
             era={selectedEra}
+            taxEstimatorRef={taxEstimatorRef}
             onClose={handleEraPaneClose}
             onSave={handleSaveEra}
             onBulkApplyFilingStatus={handleBulkApplyFilingStatus}

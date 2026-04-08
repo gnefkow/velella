@@ -1,5 +1,6 @@
 import type { EraFacts } from "../types/era";
 import type { YearInput } from "../types/scenario";
+import type { TaxEstimatorReferenceData } from "../types/taxReferenceData";
 import { calculateYearFacts } from "./yearFacts";
 
 export function yearInputFromEraFacts(eraFacts: EraFacts, year = 0): YearInput {
@@ -32,9 +33,13 @@ export function investmentBreakdownTotal(
 }
 
 export function availableToInvestFromYearInput(
-  yearInput?: YearInput
+  yearInput?: YearInput,
+  taxEstimatorRef?: TaxEstimatorReferenceData | null
 ): number {
-  const { totalIncome, totalExpenses } = calculateYearFacts(yearInput);
+  const { totalIncome, totalExpenses } = calculateYearFacts(
+    yearInput,
+    taxEstimatorRef
+  );
   return totalIncome - totalExpenses;
 }
 
@@ -43,8 +48,11 @@ export function availableToInvestFromYearInput(
  * In automatic mode (no breakdown), negative cash flow is clamped to 0 — we do
  * not treat a shortfall as negative portfolio contribution.
  */
-export function effectiveInvestFromYearInput(yearInput: YearInput): number {
-  const available = availableToInvestFromYearInput(yearInput);
+export function effectiveInvestFromYearInput(
+  yearInput: YearInput,
+  taxEstimatorRef?: TaxEstimatorReferenceData | null
+): number {
+  const available = availableToInvestFromYearInput(yearInput, taxEstimatorRef);
   if (!yearInput.modifyInvestmentDetails) {
     return Math.max(0, available);
   }
@@ -52,8 +60,9 @@ export function effectiveInvestFromYearInput(yearInput: YearInput): number {
 }
 
 export function investmentDifferenceFromYearInput(
-  yearInput: YearInput
+  yearInput: YearInput,
+  taxEstimatorRef?: TaxEstimatorReferenceData | null
 ): number {
-  const available = availableToInvestFromYearInput(yearInput);
-  return available - effectiveInvestFromYearInput(yearInput);
+  const available = availableToInvestFromYearInput(yearInput, taxEstimatorRef);
+  return available - effectiveInvestFromYearInput(yearInput, taxEstimatorRef);
 }

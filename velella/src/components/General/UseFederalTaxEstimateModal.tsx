@@ -1,11 +1,11 @@
 import { createPortal } from "react-dom";
 import { Button, Stack, Text } from "../../../../../counterfoil-kit/src/index.ts";
 import { MODAL_PORTAL_BACKDROP_STYLE } from "../../lib/modalPortalBackdropStyle";
-import { ESTIMATED_FEDERAL_TAX_EXPENSE } from "../../lib/yearFacts";
-
 interface UseFederalTaxEstimateModalProps {
   isOpen: boolean;
   currentManualAmountLabel: string;
+  /** Federal estimate that will apply if the user confirms. */
+  federalEstimateAmount: number;
   onConfirm: () => void;
   onCancel: () => void;
 }
@@ -21,6 +21,7 @@ function formatCurrency(value: number): string {
 export default function UseFederalTaxEstimateModal({
   isOpen,
   currentManualAmountLabel,
+  federalEstimateAmount,
   onConfirm,
   onCancel,
 }: UseFederalTaxEstimateModalProps) {
@@ -48,7 +49,7 @@ export default function UseFederalTaxEstimateModal({
               No, Keep {currentManualAmountLabel}
             </Button>
             <Button variant="primary" size="lg" onClick={onConfirm}>
-              Yes, use estimate: {formatCurrency(ESTIMATED_FEDERAL_TAX_EXPENSE)}
+              Yes, use estimate: {formatCurrency(federalEstimateAmount)}
             </Button>
           </div>
         </Stack>

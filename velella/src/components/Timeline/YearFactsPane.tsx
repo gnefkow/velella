@@ -2,9 +2,11 @@ import { useCallback, useMemo, useRef, useState } from "react";
 import { Stack, Text } from "../../../../../counterfoil-kit/src/index.ts";
 import {
   calculateYearFacts,
-  ESTIMATED_FEDERAL_TAX_EXPENSE,
   expensesWithSyncedTaxTotal,
+  federalTaxAmountForYearInput,
+  federalTaxEstimateBreakdown,
 } from "../../lib/yearFacts";
+import { REALIZED_GAIN_BASIS_UI_NOTE } from "../../engine/tax/gainsBasis";
 import {
   availableToInvestFromYearInput,
   effectiveInvestFromYearInput,
@@ -12,6 +14,7 @@ import {
 } from "../../lib/invest";
 import { isFieldOverridden } from "../../lib/eraHelpers";
 import type { FilingStatus, Scenario, YearInput } from "../../types/scenario";
+import type { TaxEstimatorReferenceData } from "../../types/taxReferenceData";
 import FilingStatusApplyModal from "../General/FilingStatusApplyModal";
 import NoOverridesYetModal from "../General/NoOverridesYetModal";
 import UseFederalTaxEstimateModal from "../General/UseFederalTaxEstimateModal";
@@ -28,10 +31,12 @@ import YearFactsSocialSecurityFields from "./YearFactsSocialSecurityFields";
 import { memberIsSocialSecurityEligibleAge } from "../../lib/socialSecurityEligibility";
 import { memberIsPreTaxDistributionEligibleAge } from "../../lib/preTaxDistributionEligibility";
 import InvestFactsSection from "./InvestFactsSection";
+import TaxEstimateBreakdownModal from "../General/TaxEstimateBreakdownModal";
 
 interface YearFactsPaneProps {
   scenario: Scenario;
   selectedYearInput: YearInput | null;
+  taxEstimatorRef?: TaxEstimatorReferenceData | null;
   onUpdateYearInput: (
     year: number,
     updater: (yearInput: YearInput) => YearInput
@@ -46,6 +51,7 @@ interface YearFactsPaneProps {
 export default function YearFactsPane({
   scenario,
   selectedYearInput,
+  taxEstimatorRef = null,
   onUpdateYearInput,
   onOverrideField,
   onRelinkField,
@@ -60,6 +66,8 @@ export default function YearFactsPane({
   const [showFederalTaxEstimateModal, setShowFederalTaxEstimateModal] =
     useState(false);
   const [showNoTaxOverridesYetModal, setShowNoTaxOverridesYetModal] =
+    useState(false);
+  const [showTaxEstimateBreakdownModal, setShowTaxEstimateBreakdownModal] =
     useState(false);
 
   const incomeEarners = useMemo(
@@ -215,16 +223,33 @@ export default function YearFactsPane({
     );
   }
 
-  const { ordinaryIncome, totalIncome, totalExpenses } =
-    calculateYearFacts(selectedYearInput);
+  const federalEstimateForYear = federalTaxAmountForYearInput(
+    selectedYearInput,
+    taxEstimatorRef
+  );
+  const taxEstimateBreakdown = federalTaxEstimateBreakdown(
+    selectedYearInput,
+    taxEstimatorRef
+  );
+
+  const { ordinaryIncome, totalIncome, totalExpenses, totalTaxExpense } =
+    calculateYearFacts(selectedYearInput, taxEstimatorRef);
   const showProminentPreTaxDistribution = incomeEarners.some((member) =>
     memberIsPreTaxDistributionEligibleAge(member.birthday, selectedYearInput.year)
   );
 
-  const availableToInvest = availableToInvestFromYearInput(selectedYearInput);
-  const effectiveInvest = effectiveInvestFromYearInput(selectedYearInput);
-  const investmentDifference =
-    investmentDifferenceFromYearInput(selectedYearInput);
+  const availableToInvest = availableToInvestFromYearInput(
+    selectedYearInput,
+    taxEstimatorRef
+  );
+  const effectiveInvest = effectiveInvestFromYearInput(
+    selectedYearInput,
+    taxEstimatorRef
+  );
+  const investmentDifference = investmentDifferenceFromYearInput(
+    selectedYearInput,
+    taxEstimatorRef
+  );
   const usingFederalTaxEstimate =
     selectedYearInput.expenses.federalTaxSource === "use-estimate";
   const federalTaxFieldState = getEraState("selected-federal-tax-amount");
@@ -241,12 +266,16 @@ export default function YearFactsPane({
   };
 
   const applyManualFederalTax = () => {
+    const seed = federalTaxAmountForYearInput(
+      selectedYearInput,
+      taxEstimatorRef
+    );
     updateYearInput((yearInput) => ({
       ...yearInput,
       expenses: expensesWithSyncedTaxTotal({
         ...yearInput.expenses,
         federalTaxSource: "manual",
-        selectedFederalTaxAmount: ESTIMATED_FEDERAL_TAX_EXPENSE,
+        selectedFederalTaxAmount: seed,
       }),
     }));
   };
@@ -445,6 +474,9 @@ export default function YearFactsPane({
               onOverride={() => onOverrideField?.(selectedYearInput.year, "short-term-capital-gains")}
               onRelink={() => onRelinkField?.(selectedYearInput.year, "short-term-capital-gains")}
             />
+            <Text size="body2" hierarchy="secondary" className="-mt-2 pb-1">
+              {REALIZED_GAIN_BASIS_UI_NOTE}
+            </Text>
 
             <YearFactsField
               title="Ordinary Income"
@@ -473,6 +505,9 @@ export default function YearFactsPane({
               onOverride={() => onOverrideField?.(selectedYearInput.year, "long-term-capital-gains")}
               onRelink={() => onRelinkField?.(selectedYearInput.year, "long-term-capital-gains")}
             />
+            <Text size="body2" hierarchy="secondary" className="-mt-2 pb-1">
+              {REALIZED_GAIN_BASIS_UI_NOTE}
+            </Text>
 
             {!showProminentPreTaxDistribution ? (
               <YearFactsPreTaxDistributionField
@@ -546,11 +581,16 @@ export default function YearFactsPane({
               description="Manual federal income tax liability for this year."
               value={
                 usingFederalTaxEstimate
-                  ? ESTIMATED_FEDERAL_TAX_EXPENSE
+                  ? federalEstimateForYear
                   : selectedYearInput.expenses.selectedFederalTaxAmount
               }
+              estimatedFederalAmount={federalEstimateForYear}
               useEstimate={usingFederalTaxEstimate}
               onToggleEstimate={handleFederalTaxEstimateToggle}
+              showEstimateBreakdown={Boolean(taxEstimatorRef)}
+              onOpenEstimateBreakdown={() =>
+                setShowTaxEstimateBreakdownModal(true)
+              }
               onCommit={(value) =>
                 updateYearInput((yearInput) => ({
                   ...yearInput,
@@ -616,7 +656,7 @@ export default function YearFactsPane({
             <YearFactsField
               title="Total Tax"
               description="Federal plus state and local tax estimates."
-              value={selectedYearInput.expenses.taxes}
+              value={totalTaxExpense}
             />
 
             <YearFactsField
@@ -731,11 +771,18 @@ export default function YearFactsPane({
           currency: "USD",
           maximumFractionDigits: 0,
         }).format(selectedYearInput.expenses.selectedFederalTaxAmount)}
+        federalEstimateAmount={federalEstimateForYear}
         onCancel={() => setShowFederalTaxEstimateModal(false)}
         onConfirm={() => {
           applyFederalTaxEstimate();
           setShowFederalTaxEstimateModal(false);
         }}
+      />
+      <TaxEstimateBreakdownModal
+        isOpen={showTaxEstimateBreakdownModal}
+        onClose={() => setShowTaxEstimateBreakdownModal(false)}
+        yearLabel={`Year ${selectedYearInput.year}`}
+        result={taxEstimateBreakdown}
       />
       <NoOverridesYetModal
         isOpen={showNoTaxOverridesYetModal}
